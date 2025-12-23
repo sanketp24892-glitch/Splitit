@@ -1,8 +1,4 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-
-// Fix: Use process.env.API_KEY directly as a named parameter as per the strictly enforced guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export interface ParsedReceipt {
   description: string;
@@ -12,6 +8,11 @@ export interface ParsedReceipt {
 
 export const parseReceipt = async (base64Image: string): Promise<ParsedReceipt | null> => {
   try {
+    // Initialize inside the function to avoid top-level crashes and ensure 
+    // the most current API_KEY is used.
+    const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : '';
+    const ai = new GoogleGenAI({ apiKey: apiKey || '' });
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: [

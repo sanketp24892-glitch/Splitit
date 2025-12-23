@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Participant, Expense, Settlement, Balance } from './types.ts';
 import ParticipantManager from './components/ParticipantManager.tsx';
@@ -175,9 +174,9 @@ const App: React.FC = () => {
                 SplitIt
               </h1>
             </div>
-            {/* Tagline adjusted to 2 lines for visibility */}
+            {/* Tagline forced to 2 lines for full visibility on all screens */}
             <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 tracking-[0.05em] sm:tracking-[0.1em] mt-0.5 leading-tight">
-              good times in,<br className="sm:hidden" /> awkward math out.
+              good times in,<br /> awkward math out.
             </p>
           </div>
           
