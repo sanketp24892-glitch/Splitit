@@ -3,6 +3,7 @@ export interface Participant {
   id: string;
   name: string;
   avatar: string;
+  upiId?: string;
 }
 
 export interface Expense {
@@ -12,7 +13,7 @@ export interface Expense {
   payerId: string;
   participantIds: string[];
   date: number;
-  category: 'Food' | 'Transport' | 'Lodging' | 'Entertainment' | 'Other';
+  category: 'Food' | 'Transport' | 'Lodging' | 'Entertainment' | 'Payment' | 'Other';
 }
 
 export interface Settlement {
