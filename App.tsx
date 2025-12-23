@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Participant, Expense, Settlement, Balance } from './types.ts';
 import ParticipantManager from './components/ParticipantManager.tsx';
@@ -25,6 +26,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'expenses' | 'settlement'>('expenses');
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle');
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // URL Sharing & Persistence
   useEffect(() => {
@@ -77,20 +79,55 @@ const App: React.FC = () => {
     }
   };
 
-  const handleShare = () => {
-    try {
-      const dataString = JSON.stringify({ participants, expenses, eventName });
-      const encodedData = btoa(encodeURIComponent(dataString));
-      const shareUrl = `${window.location.origin}${window.location.pathname}#${encodedData}`;
-      
-      navigator.clipboard.writeText(shareUrl).then(() => {
-        setShareStatus('copied');
-        setTimeout(() => setShareStatus('idle'), 3000);
-      });
-    } catch (e) {
-      console.error("Failed to generate share link", e);
-      alert("Could not generate share link. Try with less data.");
-    }
+  const { balances, settlements, totalSpent } = useMemo(() => {
+    const bals = calculateBalances(participants, expenses);
+    return {
+      balances: bals,
+      settlements: calculateSettlements([...bals]),
+      totalSpent: expenses.reduce((acc, curr) => curr.category !== 'Payment' ? acc + curr.amount : acc, 0)
+    };
+  }, [participants, expenses]);
+
+  const getShareUrl = () => {
+    const dataString = JSON.stringify({ participants, expenses, eventName });
+    const encodedData = btoa(encodeURIComponent(dataString));
+    return `${window.location.origin}${window.location.pathname}#${encodedData}`;
+  };
+
+  const getSettlementText = () => {
+    if (settlements.length === 0) return "All settled up!";
+    return settlements.map(s => {
+      const fromP = participants.find(p => p.id === s.from)?.name || 'Someone';
+      const toP = participants.find(p => p.id === s.to)?.name || 'Someone';
+      return `• ${fromP} owes ${toP}: ₹${s.amount.toFixed(2)}`;
+    }).join('\n');
+  };
+
+  const handleShareWhatsApp = () => {
+    const url = getShareUrl();
+    const text = `*SplitIt: ${eventName || 'Trip Expenses'}*\n\nSettlement Details:\n${getSettlementText()}\n\nFull details here: ${url}`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const handleShareGmail = () => {
+    const url = getShareUrl();
+    const subject = `SplitIt Expenses: ${eventName || 'Group Trip'}`;
+    const body = `Hi squad,\n\nHere are the settlement details for ${eventName || 'our trip'}:\n\n${getSettlementText()}\n\nView and edit full details here: ${url}`;
+    window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+  };
+
+  const handleShareSMS = () => {
+    const url = getShareUrl();
+    const text = `SplitIt: ${eventName || 'Expenses'}\n${getSettlementText()}\nLink: ${url}`;
+    window.open(`sms:?body=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const handleCopyLink = () => {
+    const url = getShareUrl();
+    navigator.clipboard.writeText(url).then(() => {
+      setShareStatus('copied');
+      setTimeout(() => setShareStatus('idle'), 2000);
+    });
   };
 
   const addParticipant = (name: string) => {
@@ -131,15 +168,6 @@ const App: React.FC = () => {
     });
   };
 
-  const { balances, settlements, totalSpent } = useMemo(() => {
-    const bals = calculateBalances(participants, expenses);
-    return {
-      balances: bals,
-      settlements: calculateSettlements([...bals]),
-      totalSpent: expenses.reduce((acc, curr) => curr.category !== 'Payment' ? acc + curr.amount : acc, 0)
-    };
-  }, [participants, expenses]);
-
   const categoryData = useMemo(() => {
     const counts: Record<string, number> = {};
     expenses.filter(e => e.category !== 'Payment').forEach(e => {
@@ -174,7 +202,6 @@ const App: React.FC = () => {
                 SplitIt
               </h1>
             </div>
-            {/* Tagline forced to 2 lines for full visibility on all screens */}
             <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 tracking-[0.05em] sm:tracking-[0.1em] mt-0.5 leading-tight">
               good times in,<br /> awkward math out.
             </p>
@@ -225,15 +252,11 @@ const App: React.FC = () => {
               New Event
             </button>
             <button
-              onClick={handleShare}
-              className={`flex-[2] sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-2xl text-xs sm:text-sm font-bold transition-all border ${
-                shareStatus === 'copied' 
-                ? 'bg-green-50 border-green-200 text-green-600' 
-                : 'bg-[#4f46e5] border-[#4f46e5] text-white hover:bg-[#4338ca] shadow-md shadow-indigo-100'
-              }`}
+              onClick={() => setShowShareModal(true)}
+              className="flex-[2] sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-2xl text-xs sm:text-sm font-bold transition-all bg-[#4f46e5] border-[#4f46e5] text-white hover:bg-[#4338ca] shadow-md shadow-indigo-100"
             >
-              <i className={`fa-solid ${shareStatus === 'copied' ? 'fa-check' : 'fa-share-nodes'}`}></i>
-              {shareStatus === 'copied' ? 'Link Copied!' : 'Share with Squad'}
+              <i className="fa-solid fa-share-nodes"></i>
+              Share with Squad
             </button>
           </div>
         </div>
@@ -428,6 +451,70 @@ const App: React.FC = () => {
                   Delete Expense
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-[#1e293b]">Share with Squad</h3>
+              <button onClick={() => setShowShareModal(false)} className="text-slate-400 hover:text-slate-600 p-2">
+                <i className="fa-solid fa-xmark text-lg"></i>
+              </button>
+            </div>
+            <div className="p-6 grid grid-cols-2 gap-4">
+              <button 
+                onClick={handleShareWhatsApp}
+                className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-green-50 hover:bg-green-100 transition-colors group"
+              >
+                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform">
+                  <i className="fa-brands fa-whatsapp text-2xl"></i>
+                </div>
+                <span className="text-xs font-bold text-green-700">WhatsApp</span>
+              </button>
+
+              <button 
+                onClick={handleShareGmail}
+                className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-red-50 hover:bg-red-100 transition-colors group"
+              >
+                <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform">
+                  <i className="fa-solid fa-envelope text-xl"></i>
+                </div>
+                <span className="text-xs font-bold text-red-700">Gmail</span>
+              </button>
+
+              <button 
+                onClick={handleShareSMS}
+                className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-blue-50 hover:bg-blue-100 transition-colors group"
+              >
+                <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform">
+                  <i className="fa-solid fa-message text-xl"></i>
+                </div>
+                <span className="text-xs font-bold text-blue-700">Message</span>
+              </button>
+
+              <button 
+                onClick={handleCopyLink}
+                className={`flex flex-col items-center gap-2 p-4 rounded-2xl transition-colors group ${
+                  shareStatus === 'copied' ? 'bg-indigo-100' : 'bg-slate-50 hover:bg-slate-100'
+                }`}
+              >
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform ${
+                  shareStatus === 'copied' ? 'bg-indigo-600' : 'bg-slate-700'
+                }`}>
+                  <i className={`fa-solid ${shareStatus === 'copied' ? 'fa-check' : 'fa-link'} text-xl`}></i>
+                </div>
+                <span className={`text-xs font-bold ${shareStatus === 'copied' ? 'text-indigo-700' : 'text-slate-700'}`}>
+                  {shareStatus === 'copied' ? 'Copied!' : 'Copy Link'}
+                </span>
+              </button>
+            </div>
+            <div className="p-4 bg-slate-50 text-center">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Everything synced & ready</p>
             </div>
           </div>
         </div>
