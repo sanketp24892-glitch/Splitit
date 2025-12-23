@@ -9,37 +9,18 @@ interface Props {
   settlements: Settlement[];
   totalSpent: number;
   onSettle: (fromId: string, toId: string, amount: number) => void;
-  onUpdateUpi: (id: string, upiId: string) => void;
 }
 
-const SettlementView: React.FC<Props> = ({ participants, balances, settlements, totalSpent, onSettle, onUpdateUpi }) => {
+const SettlementView: React.FC<Props> = ({ participants, balances, settlements, totalSpent, onSettle }) => {
   const getParticipant = (id: string) => participants.find(p => p.id === id);
   const getParticipantName = (id: string) => getParticipant(id)?.name || 'Guest';
   
   const handleWhatsAppRequest = (s: Settlement) => {
     const payer = getParticipant(s.from);
     const payee = getParticipant(s.to);
-    
     if (!payer || !payee) return;
-
-    let targetUpi = payee.upiId;
     
-    // If no UPI ID, prompt for it as requested
-    if (!targetUpi) {
-      const input = prompt(`Enter UPI ID for ${payee.name} to include in the WhatsApp reminder:`, "");
-      if (input === null) return; 
-      if (input.trim()) {
-        targetUpi = input.trim();
-        onUpdateUpi(payee.id, targetUpi);
-      }
-    }
-
-    let message = `Hi ${payer.name}, splitIt reminder! ⚡\n\nYou owe me *₹${s.amount.toFixed(2)}*.\n`;
-    if (targetUpi) {
-      const upiLink = `upi://pay?pa=${targetUpi}&pn=${encodeURIComponent(payee.name)}&am=${s.amount.toFixed(2)}&cu=INR`;
-      message += `\nDirect Pay: ${upiLink}\nUPI ID: *${targetUpi}*`;
-    }
-
+    let message = `Hi ${payer.name}, reminder from SplitIt! 👋\n\nYou owe me *₹${s.amount.toFixed(2)}*.`;
     const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, '_blank');
   };
@@ -50,50 +31,50 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
   }));
 
   return (
-    <div className="space-y-20 animate-in fade-in slide-in-from-bottom-10 duration-1000">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-        {/* Settlement List */}
-        <div className="space-y-10">
-          <h2 className="text-5xl font-black tracking-tighter uppercase border-b-8 border-zinc-950 pb-6">Settlement</h2>
-          <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Settlements */}
+        <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
+          <div className="flex items-center gap-2 mb-8 text-[#1e293b]">
+            <i className="fa-solid fa-handshake text-[#4f46e5]"></i>
+            <h2 className="text-xl font-bold">Suggested Payments</h2>
+          </div>
+          <div className="space-y-4">
             {settlements.length === 0 ? (
-              <div className="text-center py-32 bg-zinc-50 rounded-[3rem] border-2 border-dashed border-zinc-100">
-                <i className="fa-solid fa-circle-check text-5xl text-zinc-200 mb-6 block"></i>
-                <p className="text-zinc-400 font-black text-sm uppercase tracking-[0.3em]">All settled up</p>
+              <div className="text-center py-12 bg-slate-50 rounded-2xl">
+                <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Everything is settled!</p>
               </div>
             ) : (
               settlements.map((s, idx) => (
-                <div key={idx} className="group bg-zinc-50 p-10 rounded-[3rem] border-2 border-transparent hover:border-zinc-950 transition-all space-y-8">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-2">
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 block">Debtor</span>
-                      <p className="text-2xl font-black tracking-tighter uppercase">{getParticipantName(s.from)}</p>
+                <div key={idx} className="bg-slate-50 p-6 rounded-2xl border border-slate-100 hover:border-[#4f46e5] transition-all">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="text-left">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Debtor</span>
+                      <p className="font-bold text-[#1e293b]">{getParticipantName(s.from)}</p>
                     </div>
-                    <div className="flex flex-col items-center px-8 text-zinc-200 group-hover:text-zinc-950 transition-colors">
-                      <i className="fa-solid fa-chevron-right text-3xl"></i>
-                      <div className="bg-white px-5 py-2 rounded-full border border-zinc-100 shadow-sm mt-3">
-                         <p className="text-xl font-black text-zinc-950">₹{s.amount.toFixed(2)}</p>
-                      </div>
+                    <div className="text-center flex flex-col items-center">
+                      <i className="fa-solid fa-arrow-right text-[#4f46e5] mb-1"></i>
+                      <p className="text-lg font-bold text-[#1e293b]">₹{s.amount.toFixed(2)}</p>
                     </div>
-                    <div className="space-y-2 text-right">
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 block">Creditor</span>
-                      <p className="text-2xl font-black tracking-tighter uppercase">{getParticipantName(s.to)}</p>
+                    <div className="text-right">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Creditor</span>
+                      <p className="font-bold text-[#1e293b]">{getParticipantName(s.to)}</p>
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => handleWhatsAppRequest(s)}
-                      className="bg-zinc-950 text-white text-[10px] font-black uppercase tracking-[0.2em] py-5 px-6 rounded-[2rem] transition-all hover:bg-zinc-800 flex items-center justify-center gap-3 shadow-xl"
+                      className="bg-green-500 text-white text-[10px] font-bold uppercase py-3 rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
                     >
-                      <i className="fa-brands fa-whatsapp text-lg"></i>
-                      WhatsApp Request
+                      <i className="fa-brands fa-whatsapp text-sm"></i>
+                      Request
                     </button>
                     <button
                       onClick={() => onSettle(s.from, s.to, s.amount)}
-                      className="bg-white text-zinc-950 text-[10px] font-black uppercase tracking-[0.2em] py-5 px-6 rounded-[2rem] border-2 border-zinc-200 hover:border-zinc-950 transition-all shadow-sm"
+                      className="bg-[#4f46e5] text-white text-[10px] font-bold uppercase py-3 rounded-xl hover:bg-[#4338ca] transition-colors"
                     >
-                      Settle Balance
+                      Mark Paid
                     </button>
                   </div>
                 </div>
@@ -102,30 +83,32 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
           </div>
         </div>
 
-        {/* Visualization */}
-        <div className="space-y-10">
-          <h2 className="text-5xl font-black tracking-tighter uppercase border-b-8 border-zinc-950 pb-6">Group Balances</h2>
-          <div className="bg-white p-12 rounded-[3.5rem] border-4 border-zinc-100 h-[500px] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.05)]">
+        {/* Balance Distribution */}
+        <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
+          <div className="flex items-center gap-2 mb-8 text-[#1e293b]">
+            <i className="fa-solid fa-chart-bar text-[#4f46e5]"></i>
+            <h2 className="text-xl font-bold">Balance Overview</h2>
+          </div>
+          <div className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} layout="vertical" margin={{ left: 20 }}>
-                <CartesianGrid strokeDasharray="10 10" horizontal={false} stroke="#f8fafc" />
+              <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                 <XAxis type="number" hide />
                 <YAxis 
                   dataKey="name" 
                   type="category" 
-                  width={100} 
+                  width={60} 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 900, fill: '#000', textTransform: 'uppercase', letterSpacing: '0.1em' }} 
+                  tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }} 
                 />
                 <Tooltip 
-                  cursor={{ fill: '#f4f4f5' }}
-                  contentStyle={{ borderRadius: '2rem', border: 'none', background: '#000', color: '#fff', padding: '1.5rem' }}
-                  itemStyle={{ color: '#fff', fontSize: '12px', fontWeight: '900', textTransform: 'uppercase' }}
+                  cursor={{ fill: 'transparent' }}
+                  contentStyle={{ borderRadius: '1rem', border: 'none', background: '#1e293b', color: '#fff' }}
                 />
-                <Bar dataKey="value" radius={[0, 20, 20, 0]} barSize={40}>
+                <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={24}>
                   {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.value >= 0 ? '#000' : '#e4e4e7'} />
+                    <Cell key={`cell-${index}`} fill={entry.value >= 0 ? '#10b981' : '#f43f5e'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -134,25 +117,20 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         </div>
       </div>
 
-      {/* Aggregate Stats Card */}
-      <div className="relative overflow-hidden bg-zinc-950 p-16 rounded-[4rem] text-white flex flex-col md:flex-row items-center justify-between gap-16 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)]">
-        {/* Subtle decorative elements */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-zinc-800 rounded-full blur-[120px] opacity-20 -mr-48 -mt-48"></div>
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-zinc-800 rounded-full blur-[100px] opacity-10 -ml-32 -mb-32"></div>
-
-        <div className="text-center md:text-left relative z-10">
-          <h3 className="text-zinc-500 font-black uppercase text-xs tracking-[0.5em] mb-6">Aggregate Expenditure</h3>
-          <p className="text-8xl font-black tracking-tighter leading-none">₹{totalSpent.toLocaleString('en-IN')}</p>
+      {/* Summary Aggregate */}
+      <div className="bg-[#1e293b] p-8 sm:p-12 rounded-[2.5rem] text-white flex flex-col sm:flex-row items-center justify-between gap-8 shadow-xl">
+        <div className="text-center sm:text-left">
+          <h3 className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.2em] mb-2">Aggregate Spent</h3>
+          <p className="text-5xl font-bold tracking-tight">₹{totalSpent.toFixed(2)}</p>
         </div>
-        
-        <div className="grid grid-cols-2 gap-8 w-full md:w-auto relative z-10">
-          <div className="bg-zinc-900/50 backdrop-blur-md p-10 rounded-[3rem] border border-zinc-800 text-center space-y-3 min-w-[200px]">
-            <span className="block text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em]">Avg / Head</span>
-            <span className="text-3xl font-black">₹{(totalSpent / (participants.length || 1)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+        <div className="grid grid-cols-2 gap-4 w-full sm:w-auto">
+          <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 text-center">
+            <span className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Per Person</span>
+            <span className="text-xl font-bold">₹{(totalSpent / (participants.length || 1)).toFixed(2)}</span>
           </div>
-          <div className="bg-zinc-900/50 backdrop-blur-md p-10 rounded-[3rem] border border-zinc-800 text-center space-y-3 min-w-[200px]">
-            <span className="block text-[10px] font-black text-zinc-500 uppercase tracking-[0.3em]">Pending</span>
-            <span className="text-3xl font-black">{settlements.length} <span className="text-xs text-zinc-600">DUES</span></span>
+          <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 text-center">
+            <span className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Active Dues</span>
+            <span className="text-xl font-bold">{settlements.length}</span>
           </div>
         </div>
       </div>

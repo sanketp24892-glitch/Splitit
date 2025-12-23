@@ -20,47 +20,47 @@ const ParticipantManager: React.FC<Props> = ({ participants, onAdd, onRemove }) 
   };
 
   return (
-    <div className="space-y-12">
-      <div className="space-y-8">
-        <h2 className="text-4xl font-black tracking-tighter uppercase border-b-8 border-zinc-950 pb-4">Squad</h2>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="group relative">
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter member name..."
-              className="w-full px-8 py-6 rounded-3xl bg-zinc-100 border-2 border-transparent focus:bg-white focus:border-zinc-950 outline-none transition-all text-sm font-bold uppercase tracking-widest placeholder:text-zinc-300"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full bg-zinc-950 text-white px-8 py-6 rounded-3xl font-black uppercase tracking-widest text-[10px] hover:bg-zinc-800 transition-all shadow-2xl active:scale-95 flex items-center justify-center gap-3"
-          >
-            <i className="fa-solid fa-plus text-xs"></i>
-            Add to Squad
-          </button>
-        </form>
+    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 h-full">
+      <div className="flex items-center gap-2 text-[#1e293b] mb-6">
+        <i className="fa-solid fa-users text-[#4f46e5]"></i>
+        <h2 className="text-xl font-bold">The Squad</h2>
       </div>
+      
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Member Name"
+          className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 text-sm focus:outline-none focus:border-[#4f46e5] transition-colors placeholder:text-slate-400"
+        />
+        <button
+          type="submit"
+          className="w-full bg-[#4f46e5] text-white px-5 py-4 rounded-xl font-bold text-sm hover:bg-[#4338ca] transition-all shadow-md active:scale-[0.98]"
+        >
+          Add to Squad
+        </button>
+      </form>
 
-      <div className="space-y-4">
+      <div className="mt-10 space-y-4">
         {participants.length === 0 ? (
-          <p className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest text-center py-4">Squad list is empty</p>
+          <p className="text-[11px] font-bold text-slate-300 uppercase tracking-widest text-center py-4">
+            NO MEMBERS YET
+          </p>
         ) : (
           participants.map(p => (
-            <div key={p.id} className="flex items-center justify-between group bg-white p-5 rounded-[2rem] border-2 border-zinc-100 hover:border-zinc-950 transition-all">
-              <div className="flex items-center gap-5">
-                <div className="w-12 h-12 rounded-2xl bg-zinc-50 border-2 border-zinc-100 flex items-center justify-center overflow-hidden group-hover:border-zinc-950 transition-colors">
-                  <img src={p.avatar} alt={p.name} className="w-10 h-10 grayscale opacity-80 group-hover:opacity-100 transition-all" />
+            <div key={p.id} className="flex items-center justify-between group p-3 rounded-xl hover:bg-slate-50 transition-colors">
+              <div className="flex items-center gap-3">
+                <img src={p.avatar} alt={p.name} className="w-8 h-8 rounded-lg bg-slate-100" />
+                <div>
+                  <p className="font-bold text-sm text-[#1e293b]">{p.name}</p>
                 </div>
-                <span className="font-black text-xs uppercase tracking-[0.2em] text-zinc-800">{p.name}</span>
               </div>
               <button
                 onClick={() => onRemove(p.id)}
-                className="w-10 h-10 flex items-center justify-center text-zinc-200 hover:text-red-600 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all"
+                className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1"
               >
-                <i className="fa-solid fa-xmark"></i>
+                <i className="fa-solid fa-trash-can text-xs"></i>
               </button>
             </div>
           ))
