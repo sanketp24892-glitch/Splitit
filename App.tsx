@@ -73,12 +73,15 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-              <i className="fa-solid fa-divide text-lg"></i>
+        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between">
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+                <i className="fa-solid fa-divide text-sm"></i>
+              </div>
+              <h1 className="text-xl font-black text-slate-800 tracking-tight">SplitIt<span className="text-indigo-600">AI</span></h1>
             </div>
-            <h1 className="text-xl font-black text-slate-800 tracking-tight">SplitIt<span className="text-indigo-600">AI</span></h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Good times in, awkward math out.</p>
           </div>
           <nav className="flex gap-1 bg-slate-100 p-1 rounded-lg">
             <button
@@ -195,8 +198,8 @@ const App: React.FC = () => {
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-6 mt-12">
         <div className="max-w-6xl mx-auto px-4 text-center">
-          <p className="text-sm font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2">Powered by Gemini AI</p>
-          <p className="text-slate-300 text-xs">SplitIt AI - Smart settlements for smarter groups.</p>
+          <p className="text-sm font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2">Good times in, awkward math out.</p>
+          <p className="text-slate-300 text-xs">SplitIt AI - Powered by Gemini AI</p>
         </div>
       </footer>
     </div>
