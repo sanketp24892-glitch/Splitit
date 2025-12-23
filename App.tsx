@@ -27,21 +27,23 @@ const App: React.FC = () => {
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle');
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // URL Sharing & Persistence
   useEffect(() => {
-    const loadData = () => {
+    const loadInitialData = () => {
       const hash = window.location.hash.substring(1);
       if (hash) {
         try {
+          // Use a more robust way to decode the base64 data
           const decodedData = decodeURIComponent(atob(hash));
           const parsed = JSON.parse(decodedData);
           if (Array.isArray(parsed.participants) && Array.isArray(parsed.expenses)) {
             setParticipants(parsed.participants);
             setExpenses(parsed.expenses);
             setEventName(parsed.eventName || '');
-            // Clear hash to prevent accidental re-loads over local changes
-            window.history.replaceState(null, "", window.location.pathname);
+            setIsInitialized(true);
+            // Don't clear hash immediately to ensure it's processed
             return;
           }
         } catch (e) {
@@ -55,18 +57,20 @@ const App: React.FC = () => {
       if (savedParticipants) setParticipants(JSON.parse(savedParticipants));
       if (savedExpenses) setExpenses(JSON.parse(savedExpenses));
       if (savedEventName) setEventName(savedEventName);
+      setIsInitialized(true);
     };
 
-    loadData();
+    loadInitialData();
   }, []);
 
+  // Save to localStorage ONLY after initialization to avoid overwriting with defaults
   useEffect(() => {
-    if (participants.length > 0 || expenses.length > 0 || eventName) {
+    if (isInitialized) {
       localStorage.setItem('splitit_participants', JSON.stringify(participants));
       localStorage.setItem('splitit_expenses', JSON.stringify(expenses));
       localStorage.setItem('splitit_eventname', eventName);
     }
-  }, [participants, expenses, eventName]);
+  }, [participants, expenses, eventName, isInitialized]);
 
   const handleNewEvent = () => {
     if (window.confirm("Are you sure you want to start a new event? This will clear all current data.")) {
@@ -76,6 +80,7 @@ const App: React.FC = () => {
       localStorage.removeItem('splitit_participants');
       localStorage.removeItem('splitit_expenses');
       localStorage.removeItem('splitit_eventname');
+      window.history.replaceState(null, "", window.location.pathname);
     }
   };
 
@@ -90,35 +95,36 @@ const App: React.FC = () => {
 
   const getShareUrl = () => {
     const dataString = JSON.stringify({ participants, expenses, eventName });
+    // Using encodeURIComponent before btoa to handle multi-byte characters safely
     const encodedData = btoa(encodeURIComponent(dataString));
     return `${window.location.origin}${window.location.pathname}#${encodedData}`;
   };
 
   const getSettlementText = () => {
-    if (settlements.length === 0) return "All settled up!";
+    if (settlements.length === 0) return "All settled up! No pending dues. ✅";
     return settlements.map(s => {
       const fromP = participants.find(p => p.id === s.from)?.name || 'Someone';
       const toP = participants.find(p => p.id === s.to)?.name || 'Someone';
-      return `• ${fromP} owes ${toP}: ₹${s.amount.toFixed(2)}`;
+      return `💸 *${fromP}* owes *${toP}*: ₹${s.amount.toFixed(2)}`;
     }).join('\n');
   };
 
   const handleShareWhatsApp = () => {
     const url = getShareUrl();
-    const text = `*SplitIt: ${eventName || 'Trip Expenses'}*\n\nSettlement Details:\n${getSettlementText()}\n\nFull details here: ${url}`;
+    const text = `💰 *SplitIt: ${eventName || 'Trip Expenses'}*\n\n*Settlement Summary:*\n${getSettlementText()}\n\n🔗 View full breakdown and settle up here:\n${url}`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const handleShareGmail = () => {
     const url = getShareUrl();
     const subject = `SplitIt Expenses: ${eventName || 'Group Trip'}`;
-    const body = `Hi squad,\n\nHere are the settlement details for ${eventName || 'our trip'}:\n\n${getSettlementText()}\n\nView and edit full details here: ${url}`;
+    const body = `Hi squad,\n\nHere are the final settlement details for ${eventName || 'our trip'}:\n\n${getSettlementText().replace(/\*/g, '')}\n\nYou can view the full expense list and edit details here:\n${url}`;
     window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
   };
 
   const handleShareSMS = () => {
     const url = getShareUrl();
-    const text = `SplitIt: ${eventName || 'Expenses'}\n${getSettlementText()}\nLink: ${url}`;
+    const text = `SplitIt: ${eventName || 'Expenses'}\n${getSettlementText().replace(/\*/g, '')}\nLink: ${url}`;
     window.open(`sms:?body=${encodeURIComponent(text)}`, '_blank');
   };
 
