@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Participant, Settlement, Balance } from '../types';
+import { Participant, Settlement, Balance } from '../types.ts';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 interface Props {

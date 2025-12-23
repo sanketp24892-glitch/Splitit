@@ -1,10 +1,10 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Participant, Expense, Settlement, Balance } from './types';
-import ParticipantManager from './components/ParticipantManager';
-import ExpenseForm from './components/ExpenseForm';
-import SettlementView from './components/SettlementView';
-import { calculateBalances, calculateSettlements } from './utils/calculation';
+import { Participant, Expense, Settlement, Balance } from './types.ts';
+import ParticipantManager from './components/ParticipantManager.tsx';
+import ExpenseForm from './components/ExpenseForm.tsx';
+import SettlementView from './components/SettlementView.tsx';
+import { calculateBalances, calculateSettlements } from './utils/calculation.ts';
 
 const App: React.FC = () => {
   const [participants, setParticipants] = useState<Participant[]>([]);

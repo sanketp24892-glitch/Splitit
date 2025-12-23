@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Participant } from '../types';
+import { Participant } from '../types.ts';
 
 interface Props {
   participants: Participant[];

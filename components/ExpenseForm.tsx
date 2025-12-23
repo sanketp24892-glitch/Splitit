@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
-import { Participant, Expense } from '../types';
-import { parseReceipt } from '../services/geminiService';
+import { Participant, Expense } from '../types.ts';
+import { parseReceipt } from '../services/geminiService.ts';
 
 interface Props {
   participants: Participant[];

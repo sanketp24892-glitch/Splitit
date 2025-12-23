@@ -1,5 +1,5 @@
 
-import { Expense, Participant, Settlement, Balance } from '../types';
+import { Expense, Participant, Settlement, Balance } from '../types.ts';
 
 export const calculateBalances = (participants: Participant[], expenses: Expense[]): Balance[] => {
   const balances: Record<string, number> = {};
