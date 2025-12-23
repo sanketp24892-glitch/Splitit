@@ -1,5 +1,5 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
+import LZString from 'lz-string';
 import { Participant, Expense, Settlement, Balance } from './types.ts';
 import ParticipantManager from './components/ParticipantManager.tsx';
 import ExpenseForm from './components/ExpenseForm.tsx';
@@ -29,34 +29,58 @@ const App: React.FC = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  // Helper to recreate avatar URL
+  const getAvatar = (name: string) => `https://api.dicebear.com/7.x/initials/svg?seed=${name}&backgroundColor=4f46e5&textColor=ffffff`;
+
   // URL Sharing & Persistence
   useEffect(() => {
     const loadInitialData = () => {
       const hash = window.location.hash.substring(1);
       if (hash) {
         try {
-          // Use a more robust way to decode the base64 data
-          const decodedData = decodeURIComponent(atob(hash));
-          const parsed = JSON.parse(decodedData);
-          if (Array.isArray(parsed.participants) && Array.isArray(parsed.expenses)) {
-            setParticipants(parsed.participants);
-            setExpenses(parsed.expenses);
-            setEventName(parsed.eventName || '');
-            setIsInitialized(true);
-            // Don't clear hash immediately to ensure it's processed
-            return;
+          // Decompress the data from the hash
+          const decompressed = LZString.decompressFromEncodedURIComponent(hash);
+          if (decompressed) {
+            const parsed = JSON.parse(decompressed);
+            if (Array.isArray(parsed.p) && Array.isArray(parsed.e)) {
+              // Reconstruct the full state from minimized keys
+              const reconstructedParticipants = parsed.p.map((p: any) => ({
+                id: p.i,
+                name: p.n,
+                avatar: getAvatar(p.n)
+              }));
+              
+              const reconstructedExpenses = parsed.e.map((e: any) => ({
+                id: e.i,
+                description: e.d,
+                amount: e.a,
+                payerId: e.p,
+                participantIds: e.s,
+                date: e.t,
+                category: e.c
+              }));
+
+              setParticipants(reconstructedParticipants);
+              setExpenses(reconstructedExpenses);
+              setEventName(parsed.n || '');
+              setIsInitialized(true);
+              return;
+            }
           }
         } catch (e) {
           console.error("Failed to parse shared link data", e);
         }
       }
 
+      // Fallback to localStorage if no hash or hash failed
       const savedParticipants = localStorage.getItem('splitit_participants');
       const savedExpenses = localStorage.getItem('splitit_expenses');
       const savedEventName = localStorage.getItem('splitit_eventname');
+      
       if (savedParticipants) setParticipants(JSON.parse(savedParticipants));
       if (savedExpenses) setExpenses(JSON.parse(savedExpenses));
       if (savedEventName) setEventName(savedEventName);
+      
       setIsInitialized(true);
     };
 
@@ -77,9 +101,7 @@ const App: React.FC = () => {
       setEventName('');
       setParticipants([]);
       setExpenses([]);
-      localStorage.removeItem('splitit_participants');
-      localStorage.removeItem('splitit_expenses');
-      localStorage.removeItem('splitit_eventname');
+      localStorage.clear();
       window.history.replaceState(null, "", window.location.pathname);
     }
   };
@@ -94,37 +116,45 @@ const App: React.FC = () => {
   }, [participants, expenses]);
 
   const getShareUrl = () => {
-    const dataString = JSON.stringify({ participants, expenses, eventName });
-    // Using encodeURIComponent before btoa to handle multi-byte characters safely
-    const encodedData = btoa(encodeURIComponent(dataString));
-    return `${window.location.origin}${window.location.pathname}#${encodedData}`;
+    // Minimize payload to keep link short
+    const minimizedData = {
+      n: eventName,
+      p: participants.map(p => ({ i: p.id, n: p.name })), // Only id and name
+      e: expenses.map(e => ({ 
+        i: e.id, d: e.description, a: e.amount, p: e.payerId, s: e.participantIds, t: e.date, c: e.category 
+      }))
+    };
+    
+    const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(minimizedData));
+    return `${window.location.origin}${window.location.pathname}#${compressed}`;
   };
 
-  const getSettlementText = () => {
+  const getSettlementText = (isFormatted: boolean = true) => {
     if (settlements.length === 0) return "All settled up! No pending dues. ✅";
     return settlements.map(s => {
       const fromP = participants.find(p => p.id === s.from)?.name || 'Someone';
       const toP = participants.find(p => p.id === s.to)?.name || 'Someone';
-      return `💸 *${fromP}* owes *${toP}*: ₹${s.amount.toFixed(2)}`;
+      const b = isFormatted ? "*" : "";
+      return `💸 ${b}${fromP}${b} owes ${b}${toP}${b}: ₹${s.amount.toFixed(2)}`;
     }).join('\n');
   };
 
   const handleShareWhatsApp = () => {
     const url = getShareUrl();
-    const text = `💰 *SplitIt: ${eventName || 'Trip Expenses'}*\n\n*Settlement Summary:*\n${getSettlementText()}\n\n🔗 View full breakdown and settle up here:\n${url}`;
+    const text = `💰 *SplitIt: ${eventName || 'Trip Expenses'}*\n\n*Settlement Details:*\n${getSettlementText(true)}\n\n🔗 View full list & settle here:\n${url}`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const handleShareGmail = () => {
     const url = getShareUrl();
     const subject = `SplitIt Expenses: ${eventName || 'Group Trip'}`;
-    const body = `Hi squad,\n\nHere are the final settlement details for ${eventName || 'our trip'}:\n\n${getSettlementText().replace(/\*/g, '')}\n\nYou can view the full expense list and edit details here:\n${url}`;
+    const body = `Hi squad,\n\nHere are the settlement details for ${eventName || 'our trip'}:\n\n${getSettlementText(false)}\n\nView breakdown here:\n${url}`;
     window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
   };
 
   const handleShareSMS = () => {
     const url = getShareUrl();
-    const text = `SplitIt: ${eventName || 'Expenses'}\n${getSettlementText().replace(/\*/g, '')}\nLink: ${url}`;
+    const text = `SplitIt: ${eventName || 'Expenses'}\n${getSettlementText(false)}\nLink: ${url}`;
     window.open(`sms:?body=${encodeURIComponent(text)}`, '_blank');
   };
 
@@ -140,7 +170,7 @@ const App: React.FC = () => {
     const newP: Participant = {
       id: crypto.randomUUID(),
       name,
-      avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${name}&backgroundColor=4f46e5&textColor=ffffff`
+      avatar: getAvatar(name)
     };
     setParticipants([...participants, newP]);
   };
@@ -287,7 +317,7 @@ const App: React.FC = () => {
                   </span>
                 </div>
                 
-                <div className="min-h-[300px] sm:min-h-[400px] bg-white border-2 border-dashed border-slate-200 rounded-3xl p-4 sm:p-6 flex flex-col items-center justify-center text-center overflow-y-auto max-h-[500px] sm:max-h-[600px]">
+                <div className="min-h-[300px] sm:min-h-[400px] bg-white border-2 border-dashed border-slate-200 rounded-3xl p-4 sm:p-6 flex flex-col items-center justify-center text-center overflow-y-auto max-h-[500px] sm:max-h-[600px] scrollbar-hide">
                   {expenses.length === 0 ? (
                     <>
                       <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-4">
