@@ -1,7 +1,8 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Fix: Use process.env.API_KEY directly as a named parameter as per the strictly enforced guidelines
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export interface ParsedReceipt {
   description: string;

@@ -31,50 +31,50 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
   }));
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
         {/* Settlements */}
-        <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
-          <div className="flex items-center gap-2 mb-8 text-[#1e293b]">
+        <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-sm border border-slate-100">
+          <div className="flex items-center gap-2 mb-6 sm:mb-8 text-[#1e293b]">
             <i className="fa-solid fa-handshake text-[#4f46e5]"></i>
-            <h2 className="text-xl font-bold">Suggested Payments</h2>
+            <h2 className="text-lg sm:text-xl font-bold">Suggested Payments</h2>
           </div>
           <div className="space-y-4">
             {settlements.length === 0 ? (
-              <div className="text-center py-12 bg-slate-50 rounded-2xl">
-                <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Everything is settled!</p>
+              <div className="text-center py-10 sm:py-12 bg-slate-50 rounded-2xl">
+                <p className="text-slate-400 font-bold text-[10px] sm:text-xs uppercase tracking-widest">Everything is settled!</p>
               </div>
             ) : (
               settlements.map((s, idx) => (
-                <div key={idx} className="bg-slate-50 p-6 rounded-2xl border border-slate-100 hover:border-[#4f46e5] transition-all">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="text-left">
-                      <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Debtor</span>
-                      <p className="font-bold text-[#1e293b]">{getParticipantName(s.from)}</p>
+                <div key={idx} className="bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-100 hover:border-[#4f46e5] transition-all">
+                  <div className="flex items-center justify-between mb-4 gap-2">
+                    <div className="text-left min-w-0 flex-1">
+                      <span className="text-[8px] sm:text-[10px] font-bold uppercase text-slate-400 block mb-1">Debtor</span>
+                      <p className="font-bold text-[#1e293b] truncate text-xs sm:text-sm">{getParticipantName(s.from)}</p>
                     </div>
-                    <div className="text-center flex flex-col items-center">
-                      <i className="fa-solid fa-arrow-right text-[#4f46e5] mb-1"></i>
-                      <p className="text-lg font-bold text-[#1e293b]">₹{s.amount.toFixed(2)}</p>
+                    <div className="text-center flex flex-col items-center shrink-0">
+                      <i className="fa-solid fa-arrow-right text-[#4f46e5] mb-1 text-xs"></i>
+                      <p className="text-sm sm:text-lg font-bold text-[#1e293b]">₹{s.amount.toFixed(0)}</p>
                     </div>
-                    <div className="text-right">
-                      <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">Creditor</span>
-                      <p className="font-bold text-[#1e293b]">{getParticipantName(s.to)}</p>
+                    <div className="text-right min-w-0 flex-1">
+                      <span className="text-[8px] sm:text-[10px] font-bold uppercase text-slate-400 block mb-1">Creditor</span>
+                      <p className="font-bold text-[#1e293b] truncate text-xs sm:text-sm">{getParticipantName(s.to)}</p>
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     <button
                       onClick={() => handleWhatsAppRequest(s)}
-                      className="bg-green-500 text-white text-[10px] font-bold uppercase py-3 rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
+                      className="bg-green-500 text-white text-[9px] sm:text-[10px] font-bold uppercase py-2.5 sm:py-3 rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
                     >
-                      <i className="fa-brands fa-whatsapp text-sm"></i>
-                      Request
+                      <i className="fa-brands fa-whatsapp text-xs sm:text-sm"></i>
+                      <span className="truncate">Request</span>
                     </button>
                     <button
                       onClick={() => onSettle(s.from, s.to, s.amount)}
-                      className="bg-[#4f46e5] text-white text-[10px] font-bold uppercase py-3 rounded-xl hover:bg-[#4338ca] transition-colors"
+                      className="bg-[#4f46e5] text-white text-[9px] sm:text-[10px] font-bold uppercase py-2.5 sm:py-3 rounded-xl hover:bg-[#4338ca] transition-colors"
                     >
-                      Mark Paid
+                      <span className="truncate">Mark Paid</span>
                     </button>
                   </div>
                 </div>
@@ -84,14 +84,14 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         </div>
 
         {/* Balance Distribution */}
-        <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
-          <div className="flex items-center gap-2 mb-8 text-[#1e293b]">
+        <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-sm border border-slate-100">
+          <div className="flex items-center gap-2 mb-6 sm:mb-8 text-[#1e293b]">
             <i className="fa-solid fa-chart-bar text-[#4f46e5]"></i>
-            <h2 className="text-xl font-bold">Balance Overview</h2>
+            <h2 className="text-lg sm:text-xl font-bold">Balance Overview</h2>
           </div>
-          <div className="h-[350px]">
+          <div className="h-[250px] sm:h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 10 }}>
+              <BarChart data={chartData} layout="vertical" margin={{ left: 5, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                 <XAxis type="number" hide />
                 <YAxis 
@@ -100,13 +100,14 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                   width={60} 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }} 
+                  tick={{ fontSize: 9, fontWeight: 700, fill: '#64748b' }} 
                 />
                 <Tooltip 
                   cursor={{ fill: 'transparent' }}
-                  contentStyle={{ borderRadius: '1rem', border: 'none', background: '#1e293b', color: '#fff' }}
+                  contentStyle={{ borderRadius: '1rem', border: 'none', background: '#1e293b', color: '#fff', fontSize: '10px' }}
+                  formatter={(value: number) => `₹${value.toFixed(2)}`}
                 />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={24}>
+                <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={20}>
                   {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.value >= 0 ? '#10b981' : '#f43f5e'} />
                   ))}
@@ -118,19 +119,19 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
       </div>
 
       {/* Summary Aggregate */}
-      <div className="bg-[#1e293b] p-8 sm:p-12 rounded-[2.5rem] text-white flex flex-col sm:flex-row items-center justify-between gap-8 shadow-xl">
+      <div className="bg-[#1e293b] p-6 sm:p-12 rounded-[2rem] sm:rounded-[2.5rem] text-white flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 shadow-xl">
         <div className="text-center sm:text-left">
-          <h3 className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.2em] mb-2">Aggregate Spent</h3>
-          <p className="text-5xl font-bold tracking-tight">₹{totalSpent.toFixed(2)}</p>
+          <h3 className="text-slate-500 font-bold uppercase text-[9px] sm:text-[10px] tracking-[0.2em] mb-2">Aggregate Spent</h3>
+          <p className="text-4xl sm:text-5xl font-bold tracking-tight">₹{totalSpent.toFixed(0)}</p>
         </div>
-        <div className="grid grid-cols-2 gap-4 w-full sm:w-auto">
-          <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 text-center">
-            <span className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Per Person</span>
-            <span className="text-xl font-bold">₹{(totalSpent / (participants.length || 1)).toFixed(2)}</span>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 w-full sm:w-auto">
+          <div className="bg-slate-800 p-4 sm:p-6 rounded-2xl border border-slate-700 text-center">
+            <span className="block text-[8px] sm:text-[10px] font-bold text-slate-500 uppercase mb-1 sm:mb-2">Per Person</span>
+            <span className="text-base sm:text-xl font-bold">₹{(totalSpent / (participants.length || 1)).toFixed(0)}</span>
           </div>
-          <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 text-center">
-            <span className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Active Dues</span>
-            <span className="text-xl font-bold">{settlements.length}</span>
+          <div className="bg-slate-800 p-4 sm:p-6 rounded-2xl border border-slate-700 text-center">
+            <span className="block text-[8px] sm:text-[10px] font-bold text-slate-500 uppercase mb-1 sm:mb-2">Active Dues</span>
+            <span className="text-base sm:text-xl font-bold">{settlements.length}</span>
           </div>
         </div>
       </div>
