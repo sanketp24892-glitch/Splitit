@@ -10,9 +10,25 @@ const App: React.FC = () => {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [activeTab, setActiveTab] = useState<'expenses' | 'settlement'>('expenses');
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
-  // Persistence
+  // Persistence and Sharing via URL
   useEffect(() => {
+    const hash = window.location.hash.substring(1);
+    if (hash) {
+      try {
+        const decoded = JSON.parse(atob(hash));
+        if (decoded.participants && decoded.expenses) {
+          setParticipants(decoded.participants);
+          setExpenses(decoded.expenses);
+          window.location.hash = ""; 
+          return;
+        }
+      } catch (e) {
+        console.error("Failed to parse shared link", e);
+      }
+    }
+
     const savedParticipants = localStorage.getItem('splitit_participants');
     const savedExpenses = localStorage.getItem('splitit_expenses');
     if (savedParticipants) setParticipants(JSON.parse(savedParticipants));
@@ -24,12 +40,18 @@ const App: React.FC = () => {
     localStorage.setItem('splitit_expenses', JSON.stringify(expenses));
   }, [participants, expenses]);
 
-  const addParticipant = (name: string, upiId?: string) => {
+  const handleShare = () => {
+    const data = btoa(JSON.stringify({ participants, expenses }));
+    const shareUrl = `${window.location.origin}${window.location.pathname}#${data}`;
+    navigator.clipboard.writeText(shareUrl);
+    alert("Shareable link copied to clipboard! Send this to your squad.");
+  };
+
+  const addParticipant = (name: string) => {
     const newP: Participant = {
       id: crypto.randomUUID(),
       name,
-      upiId,
-      avatar: `https://picsum.photos/seed/${name}/100/100`
+      avatar: `https://api.dicebear.com/7.x/shapes/svg?seed=${name}&backgroundColor=000000`
     };
     setParticipants([...participants, newP]);
   };
@@ -40,24 +62,44 @@ const App: React.FC = () => {
   };
 
   const addExpense = (newExp: Omit<Expense, 'id'>) => {
-    const exp: Expense = {
-      ...newExp,
-      id: crypto.randomUUID()
-    };
+    const exp: Expense = { ...newExp, id: crypto.randomUUID() };
     setExpenses([exp, ...expenses]);
   };
 
   const removeExpense = (id: string) => {
     setExpenses(expenses.filter(e => e.id !== id));
+    if (selectedExpense?.id === id) setSelectedExpense(null);
+  };
+
+  const handleSettleIndividual = (expense: Expense) => {
+    const payer = participants.find(p => p.id === expense.payerId);
+    if (!payer) return;
+
+    const perPerson = expense.amount / expense.participantIds.length;
+    
+    expense.participantIds.forEach(pId => {
+      if (pId === expense.payerId) return;
+      const borrower = participants.find(p => p.id === pId);
+      if (!borrower) return;
+
+      addExpense({
+        description: `Settled: ${borrower.name} for ${expense.description}`,
+        amount: perPerson,
+        payerId: pId,
+        participantIds: [expense.payerId],
+        category: 'Payment',
+        date: Date.now()
+      });
+    });
+    setSelectedExpense(null);
   };
 
   const handleSettle = (fromId: string, toId: string, amount: number) => {
     const fromName = participants.find(p => p.id === fromId)?.name || 'Someone';
     const toName = participants.find(p => p.id === toId)?.name || 'Someone';
-    
     addExpense({
-      description: `Settlement: ${fromName} paid ${toName}`,
-      amount: amount,
+      description: `Settlement: ${fromName} to ${toName}`,
+      amount,
       payerId: fromId,
       participantIds: [toId],
       category: 'Payment',
@@ -65,140 +107,143 @@ const App: React.FC = () => {
     });
   };
 
+  const updateParticipantUpi = (id: string, upiId: string) => {
+    setParticipants(prev => prev.map(p => p.id === id ? { ...p, upiId } : p));
+  };
+
   const { balances, settlements, totalSpent } = useMemo(() => {
     const bals = calculateBalances(participants, expenses);
     return {
       balances: bals,
       settlements: calculateSettlements([...bals]),
-      totalSpent: expenses.reduce((acc, curr) => acc + curr.amount, 0)
+      totalSpent: expenses.reduce((acc, curr) => curr.category !== 'Payment' ? acc + curr.amount : acc, 0)
     };
   }, [participants, expenses]);
 
-  const getCategoryIcon = (cat: string) => {
-    switch (cat) {
-      case 'Food': return 'fa-utensils';
-      case 'Transport': return 'fa-car';
-      case 'Lodging': return 'fa-hotel';
-      case 'Entertainment': return 'fa-ticket';
-      case 'Payment': return 'fa-handshake';
-      default: return 'fa-ellipsis';
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-white text-zinc-950 flex flex-col font-sans selection:bg-zinc-900 selection:text-white">
+      {/* Dynamic Background Element */}
+      <div className="fixed top-0 left-0 w-full h-1 bg-gradient-to-r from-zinc-200 via-zinc-950 to-zinc-200 z-50"></div>
+
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-6xl mx-auto px-4 h-20 flex items-center justify-between">
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-                <i className="fa-solid fa-divide text-sm"></i>
-              </div>
-              <h1 className="text-xl font-black text-slate-800 tracking-tight">SplitIt<span className="text-indigo-600">AI</span></h1>
+      <header className="bg-zinc-950 text-white sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-6 h-24 flex items-center justify-between">
+          <div className="flex items-center gap-5">
+            <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.2)] transform -rotate-3 hover:rotate-0 transition-transform cursor-pointer">
+              <svg viewBox="0 0 24 24" className="w-8 h-8 fill-zinc-950" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" />
+                <path d="M2 17L12 22L22 17M2 12L12 17L22 12" />
+              </svg>
             </div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Good times in, awkward math out.</p>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tighter leading-none">
+                split<span className="text-zinc-500">It</span>
+              </h1>
+              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-600 mt-1">Smart Ledger</p>
+            </div>
           </div>
-          <nav className="flex gap-1 bg-slate-100 p-1 rounded-xl">
-            <button
-              onClick={() => setActiveTab('expenses')}
-              className={`px-5 py-1.5 rounded-lg text-sm font-bold transition-all ${
-                activeTab === 'expenses' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-              }`}
+          
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={handleShare}
+              className="group flex items-center gap-2 px-5 py-2.5 rounded-full bg-zinc-900 hover:bg-white hover:text-zinc-950 border border-zinc-800 transition-all text-xs font-bold uppercase tracking-widest"
             >
-              Overview
+              <i className="fa-solid fa-share-nodes group-hover:scale-110 transition-transform"></i>
+              <span>Share</span>
             </button>
-            <button
-              onClick={() => setActiveTab('settlement')}
-              className={`px-5 py-1.5 rounded-lg text-sm font-bold transition-all ${
-                activeTab === 'settlement' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Settlement
-            </button>
-          </nav>
+            <nav className="flex bg-zinc-900 p-1.5 rounded-full border border-zinc-800 shadow-inner">
+              <button
+                onClick={() => setActiveTab('expenses')}
+                className={`px-8 py-3 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+                  activeTab === 'expenses' ? 'bg-white text-zinc-950 shadow-lg' : 'text-zinc-500 hover:text-white'
+                }`}
+              >
+                Overview
+              </button>
+              <button
+                onClick={() => setActiveTab('settlement')}
+                className={`px-8 py-3 rounded-full text-xs font-black uppercase tracking-widest transition-all ${
+                  activeTab === 'settlement' ? 'bg-white text-zinc-950 shadow-lg' : 'text-zinc-500 hover:text-white'
+                }`}
+              >
+                Settle
+              </button>
+            </nav>
+          </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-8">
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-16">
         {activeTab === 'expenses' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Sidebar: People */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
+            {/* Squad Sidebar */}
             <div className="lg:col-span-3">
-              <ParticipantManager
-                participants={participants}
-                onAdd={addParticipant}
-                onRemove={removeParticipant}
-              />
+              <ParticipantManager participants={participants} onAdd={addParticipant} onRemove={removeParticipant} />
             </div>
 
-            {/* Middle: Expenses Feed */}
-            <div className="lg:col-span-5 space-y-6">
-              <div className="flex justify-between items-center mb-2">
-                <h2 className="text-xl font-bold flex items-center gap-2 text-slate-800">
-                  <i className="fa-solid fa-list-ul text-indigo-600"></i>
-                  Recent Activity
-                </h2>
-                <span className="text-xs font-bold text-slate-400 bg-slate-200/50 px-3 py-1 rounded-full">
-                  {expenses.length} Records
-                </span>
+            {/* Transactions Feed */}
+            <div className="lg:col-span-5 space-y-10">
+              <div className="flex justify-between items-baseline border-b-8 border-zinc-950 pb-6 mb-2">
+                <h2 className="text-5xl font-black tracking-tighter uppercase leading-none">Transactions</h2>
+                <div className="flex flex-col items-end">
+                  <span className="text-xs font-black bg-zinc-100 px-4 py-1.5 rounded-full border-2 border-zinc-950">
+                    {expenses.length} TOTAL
+                  </span>
+                </div>
               </div>
               
-              {expenses.length === 0 ? (
-                <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
-                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
-                    <i className="fa-solid fa-receipt text-2xl"></i>
+              <div className="space-y-6">
+                {expenses.length === 0 ? (
+                  <div className="py-32 text-center border-4 border-dashed border-zinc-100 rounded-[3rem]">
+                    <i className="fa-solid fa-box-open text-5xl text-zinc-100 mb-6 block"></i>
+                    <p className="text-zinc-300 font-bold text-sm uppercase tracking-[0.3em]">No transactions found</p>
                   </div>
-                  <h3 className="text-lg font-bold text-slate-700 mb-1">Clean slate!</h3>
-                  <p className="text-slate-400 text-sm max-w-[200px] mx-auto">Add an expense or scan a receipt to start splitting.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {expenses.sort((a, b) => b.date - a.date).map(e => (
-                    <div key={e.id} className={`bg-white p-4 rounded-xl shadow-sm border border-slate-200 group relative transition-all hover:border-indigo-200 ${e.category === 'Payment' ? 'bg-indigo-50/30' : ''}`}>
-                      <div className="flex items-start justify-between">
-                        <div className="flex gap-4">
-                          <div className={`w-12 h-12 ${e.category === 'Payment' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600'} rounded-xl flex items-center justify-center border border-indigo-100 shrink-0`}>
-                            <i className={`fa-solid ${getCategoryIcon(e.category)} text-xl`}></i>
-                          </div>
-                          <div>
-                            <h4 className="font-bold text-slate-800 leading-tight">{e.description}</h4>
-                            <p className="text-xs font-semibold text-slate-400 mb-2">
-                              {new Date(e.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })} • Paid by {participants.find(p => p.id === e.payerId)?.name}
-                            </p>
-                            <div className="flex flex-wrap gap-1">
-                              {e.participantIds.map(pId => (
-                                <span key={pId} className="px-1.5 py-0.5 bg-slate-100 rounded text-[9px] font-black text-slate-500 uppercase tracking-tighter border border-slate-200">
-                                  {participants.find(p => p.id === pId)?.name.substring(0, 3)}
-                                </span>
-                              ))}
-                            </div>
+                ) : (
+                  expenses.sort((a, b) => b.date - a.date).map(e => (
+                    <div 
+                      key={e.id} 
+                      onClick={() => setSelectedExpense(e)}
+                      className={`group relative overflow-hidden cursor-pointer p-8 rounded-[2.5rem] border-2 transition-all duration-500 ${
+                        e.category === 'Payment' 
+                        ? 'bg-zinc-50 border-transparent' 
+                        : 'bg-white border-zinc-100 hover:border-zinc-950 hover:shadow-[30px_30px_60px_-15px_rgba(0,0,0,0.1)] hover:-translate-y-2'
+                      }`}
+                    >
+                      {/* Interactive background shine on hover */}
+                      <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-zinc-400/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+                      
+                      <div className="relative z-10 flex items-center justify-between">
+                        <div className="space-y-2">
+                          <h4 className="font-black text-2xl tracking-tighter group-hover:text-zinc-950 transition-colors">{e.description}</h4>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 bg-zinc-50 group-hover:bg-zinc-100 px-2 py-0.5 rounded transition-colors">
+                              {new Date(e.date).toLocaleDateString()}
+                            </span>
+                            <span className="w-1.5 h-1.5 bg-zinc-200 rounded-full"></span>
+                            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">
+                              {participants.find(p => p.id === e.payerId)?.name || 'Guest'} paid
+                            </span>
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className={`text-lg font-black ${e.category === 'Payment' ? 'text-indigo-600' : 'text-slate-900'}`}>₹{e.amount.toFixed(2)}</div>
-                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{e.category}</div>
+                          <div className={`text-3xl font-black tracking-tighter ${e.category === 'Payment' ? 'text-zinc-300' : 'text-zinc-950'}`}>
+                            ₹{e.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <p className="text-[9px] font-black text-zinc-300 uppercase tracking-widest mt-1">
+                            {e.participantIds.length} Split
+                          </p>
                         </div>
                       </div>
-                      <button
-                        onClick={() => removeExpense(e.id)}
-                        className="absolute top-2 right-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all p-2"
-                      >
-                        <i className="fa-solid fa-xmark"></i>
-                      </button>
                     </div>
-                  ))}
-                </div>
-              )}
+                  ))
+                )}
+              </div>
             </div>
 
-            {/* Right: Add Form */}
+            {/* Add Expense Form Sidebar */}
             <div className="lg:col-span-4">
-              <ExpenseForm
-                participants={participants}
-                onAdd={addExpense}
-              />
+              <ExpenseForm participants={participants} onAdd={addExpense} />
             </div>
           </div>
         ) : (
@@ -208,18 +253,89 @@ const App: React.FC = () => {
             settlements={settlements}
             totalSpent={totalSpent}
             onSettle={handleSettle}
+            onUpdateUpi={updateParticipantUpi}
           />
         )}
       </main>
 
+      {/* Modern Transaction Detail Sheet */}
+      {selectedExpense && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-zinc-950/95 backdrop-blur-xl">
+          <div className="bg-white rounded-[3rem] max-w-xl w-full overflow-hidden shadow-[0_0_100px_rgba(255,255,255,0.1)] animate-in zoom-in-95 duration-300">
+            <div className="bg-zinc-950 p-12 text-white relative">
+              <div className="absolute top-8 right-8">
+                <button 
+                  onClick={() => setSelectedExpense(null)} 
+                  className="w-12 h-12 flex items-center justify-center bg-zinc-800 hover:bg-white hover:text-zinc-950 rounded-full transition-all"
+                >
+                  <i className="fa-solid fa-xmark text-lg"></i>
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <span className="inline-block px-3 py-1 bg-zinc-800 text-[10px] font-bold uppercase tracking-[0.3em] rounded-full">Transaction Analysis</span>
+                <h3 className="text-5xl font-black tracking-tighter leading-tight">{selectedExpense.description}</h3>
+              </div>
+            </div>
+
+            <div className="p-12 space-y-12">
+              <div className="grid grid-cols-2 gap-12">
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Total Value</p>
+                  <p className="text-5xl font-black tracking-tighter">₹{selectedExpense.amount.toFixed(2)}</p>
+                </div>
+                <div className="space-y-2 text-right">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Primary Payer</p>
+                  <p className="text-2xl font-bold tracking-tight">{participants.find(p => p.id === selectedExpense.payerId)?.name || 'N/A'}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-6">Squad Involvement</p>
+                <div className="flex flex-wrap gap-3">
+                  {selectedExpense.participantIds.map(pId => (
+                    <div key={pId} className="flex items-center gap-3 px-6 py-3 rounded-2xl bg-zinc-50 border-2 border-zinc-100 font-bold text-xs uppercase tracking-wider">
+                      <div className="w-2 h-2 bg-zinc-950 rounded-full"></div>
+                      {participants.find(p => p.id === pId)?.name || 'Guest'}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {selectedExpense.category !== 'Payment' && (
+                  <button 
+                    onClick={() => handleSettleIndividual(selectedExpense)}
+                    className="group bg-zinc-950 text-white py-6 rounded-[2rem] font-black uppercase tracking-widest text-xs hover:bg-zinc-800 transition-all flex items-center justify-center gap-3"
+                  >
+                    <i className="fa-solid fa-bolt-lightning group-hover:animate-pulse"></i>
+                    Settle this transaction
+                  </button>
+                )}
+                <button 
+                  onClick={() => removeExpense(selectedExpense.id)}
+                  className="bg-zinc-100 text-zinc-400 py-6 rounded-[2rem] font-black uppercase tracking-widest text-xs hover:bg-red-50 hover:text-red-600 transition-all"
+                >
+                  Remove Record
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-8 mt-12">
-        <div className="max-w-6xl mx-auto px-4 text-center">
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.3em] mb-3">Good times in, awkward math out.</p>
-          <div className="flex items-center justify-center gap-4 text-slate-300 text-[10px] font-bold uppercase tracking-widest">
-            <span>SplitIt AI</span>
-            <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-            <span>Powered by Gemini</span>
+      <footer className="bg-zinc-50 border-t border-zinc-100 py-20 mt-20">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col items-center">
+          <div className="w-12 h-12 bg-zinc-950 rounded-2xl flex items-center justify-center mb-8 shadow-xl">
+             <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" />
+                <path d="M2 17L12 22L22 17M2 12L12 17L22 12" />
+              </svg>
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <h4 className="text-xl font-black uppercase tracking-[0.4em] text-zinc-950">splitIt</h4>
+            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-[0.8em]">© 2025 ALL RIGHTS RESERVED</p>
           </div>
         </div>
       </footer>

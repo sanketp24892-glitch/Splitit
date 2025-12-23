@@ -43,7 +43,6 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd }) => {
         category,
         date: new Date(date).getTime()
       });
-      // Reset form
       setDescription('');
       setAmount('');
       setSelectedParticipants([]);
@@ -71,143 +70,128 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd }) => {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 sticky top-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold flex items-center gap-2 text-slate-800">
-          <i className="fa-solid fa-receipt text-indigo-600"></i>
-          Add Record
-        </h2>
+    <div className="space-y-12 sticky top-32">
+      <div className="flex justify-between items-baseline border-b-8 border-zinc-950 pb-6 mb-2">
+        <h2 className="text-4xl font-black tracking-tighter uppercase leading-none">Add Expenses</h2>
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={isScanning}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+          className={`flex items-center gap-3 px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${
             isScanning 
-            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-            : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-100'
+            ? 'bg-zinc-100 text-zinc-400'
+            : 'bg-zinc-100 hover:bg-zinc-950 hover:text-white'
           }`}
         >
-          {isScanning ? (
-            <><i className="fa-solid fa-spinner animate-spin"></i> Analyzing...</>
-          ) : (
-            <><i className="fa-solid fa-camera"></i> Scan Receipt</>
-          )}
+          {isScanning ? <i className="fa-solid fa-sync animate-spin"></i> : <i className="fa-solid fa-camera"></i>}
+          <span>{isScanning ? "Processing" : "Scan Receipt"}</span>
         </button>
-        <input
-          type="file"
-          accept="image/*"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          className="hidden"
-        />
+        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Description</label>
+      <form onSubmit={handleSubmit} className="space-y-8">
+        <div className="space-y-3">
+          <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 ml-2">Description</label>
           <input
             type="text"
             required
             value={description}
             onChange={e => setDescription(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all text-sm font-medium"
-            placeholder="e.g. Starbucks, Movie Night"
+            className="w-full px-8 py-6 rounded-[2rem] bg-zinc-100 border-2 border-transparent focus:bg-white focus:border-zinc-950 outline-none transition-all text-sm font-bold uppercase tracking-widest"
+            placeholder="COFFEE, DINNER, GAS..."
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Amount</label>
+        <div className="grid grid-cols-2 gap-6">
+          <div className="space-y-3">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 ml-2">Amount</label>
             <div className="relative">
-              <span className="absolute left-4 top-2.5 text-slate-400 font-bold">₹</span>
+              <span className="absolute left-8 top-1/2 -translate-y-1/2 font-black text-zinc-950 text-lg">₹</span>
               <input
                 type="number"
                 step="0.01"
                 required
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
-                className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all text-sm font-medium"
+                className="w-full pl-14 pr-8 py-6 rounded-[2rem] bg-zinc-100 border-2 border-transparent focus:bg-white focus:border-zinc-950 outline-none transition-all text-lg font-black tracking-tighter"
                 placeholder="0.00"
               />
             </div>
           </div>
-          <div>
-            <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Date</label>
+          <div className="space-y-3">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 ml-2">Date</label>
             <input
               type="date"
               required
               value={date}
               onChange={e => setDate(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all text-sm font-medium"
+              className="w-full px-8 py-6 rounded-[2rem] bg-zinc-100 border-2 border-transparent focus:bg-white focus:border-zinc-950 outline-none transition-all text-xs font-bold uppercase tracking-widest"
             />
           </div>
         </div>
 
-        <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Category</label>
-          <select
-            value={category}
-            onChange={e => setCategory(e.target.value as any)}
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all text-sm font-medium cursor-pointer"
-          >
-            <option value="Food">Food & Drinks</option>
-            <option value="Transport">Transport</option>
-            <option value="Lodging">Lodging</option>
-            <option value="Entertainment">Entertainment</option>
-            <option value="Payment">Settle Payment</option>
-            <option value="Other">Other</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Who paid?</label>
-          <select
-            required
-            value={payerId}
-            onChange={e => setPayerId(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition-all text-sm font-medium cursor-pointer"
-          >
-            <option value="" disabled>Select payer</option>
-            {participants.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <div className="flex justify-between items-center mb-1.5">
-            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Split among</label>
-            <button
-              type="button"
-              onClick={handleAll}
-              className="text-[10px] text-indigo-600 font-black uppercase hover:underline"
+        <div className="grid grid-cols-2 gap-6">
+          <div className="space-y-3">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 ml-2">Category</label>
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value as any)}
+              className="w-full px-8 py-6 rounded-[2rem] bg-zinc-100 border-2 border-transparent focus:bg-white focus:border-zinc-950 outline-none transition-all text-[10px] font-bold uppercase tracking-widest appearance-none"
             >
-              Toggle All
-            </button>
+              <option value="Food">Food</option>
+              <option value="Transport">Transport</option>
+              <option value="Lodging">Lodging</option>
+              <option value="Entertainment">Entertainment</option>
+              <option value="Other">Other</option>
+            </select>
           </div>
-          <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200 min-h-[60px]">
-            {participants.length === 0 && <span className="text-[10px] text-slate-400 uppercase font-bold italic">Add squad members first</span>}
-            {participants.map(p => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => toggleParticipant(p.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                  selectedParticipants.includes(p.id)
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-400 hover:text-indigo-600'
-                }`}
-              >
-                {p.name}
-              </button>
-            ))}
+          <div className="space-y-3">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 ml-2">Paid By</label>
+            <select
+              required
+              value={payerId}
+              onChange={e => setPayerId(e.target.value)}
+              className="w-full px-8 py-6 rounded-[2rem] bg-zinc-100 border-2 border-transparent focus:bg-white focus:border-zinc-950 outline-none transition-all text-[10px] font-bold uppercase tracking-widest appearance-none"
+            >
+              <option value="" disabled>Select Payer</option>
+              {participants.map(p => (
+                <option key={p.id} value={p.id}>{p.name.toUpperCase()}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex justify-between items-center px-2">
+            <label className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Split Among</label>
+            <button type="button" onClick={handleAll} className="text-[10px] font-black text-zinc-950 underline decoration-2 underline-offset-4 uppercase tracking-widest">Select All</button>
+          </div>
+          <div className="flex flex-wrap gap-2.5 p-6 bg-zinc-50 rounded-[2.5rem] border-2 border-zinc-100">
+            {participants.length === 0 ? (
+              <p className="text-[9px] font-bold text-zinc-300 uppercase tracking-widest w-full text-center">No squad members added</p>
+            ) : (
+              participants.map(p => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => toggleParticipant(p.id)}
+                  className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                    selectedParticipants.includes(p.id)
+                      ? 'bg-zinc-950 text-white shadow-xl scale-105'
+                      : 'bg-white text-zinc-400 border border-zinc-100 hover:border-zinc-300'
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))
+            )}
           </div>
         </div>
 
         <button
           type="submit"
-          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 rounded-xl font-black uppercase tracking-widest shadow-lg shadow-indigo-100 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+          className="w-full bg-zinc-950 text-white py-8 rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-xs shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-4"
         >
-          <i className="fa-solid fa-plus-circle"></i>
+          <i className="fa-solid fa-check-double"></i>
           Record Transaction
         </button>
       </form>
