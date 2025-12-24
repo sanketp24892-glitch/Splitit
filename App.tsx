@@ -53,7 +53,7 @@ const App: React.FC = () => {
   }, [path]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('splitit_recent_events_v2');
+    const saved = localStorage.getItem('splitit_recent_events_v3');
     if (saved) setRecentEvents(JSON.parse(saved));
   }, []);
 
@@ -61,7 +61,7 @@ const App: React.FC = () => {
     setRecentEvents(prev => {
       const filtered = prev.filter(e => e.code !== code);
       const updated = [{ code, name }, ...filtered].slice(0, 5);
-      localStorage.setItem('splitit_recent_events_v2', JSON.stringify(updated));
+      localStorage.setItem('splitit_recent_events_v3', JSON.stringify(updated));
       return updated;
     });
   };
@@ -113,6 +113,7 @@ const App: React.FC = () => {
       addToRecent(code, newEventName.trim());
       navigate(`/event/${code}`);
     } catch (err) {
+      console.error(err);
       alert("Failed to create event. Please try again.");
     }
   };
@@ -125,11 +126,10 @@ const App: React.FC = () => {
         upiId, 
         avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}&backgroundColor=4f46e5&textColor=ffffff` 
       });
-      // Immediate reload to show the new member
       await loadData(routeMatch.code);
     } catch (err) {
       console.error("Add participant error:", err);
-      alert("Failed to add member. Check your connection.");
+      alert("Could not add member. Please check your Supabase connection and schema.");
     }
   };
 
@@ -145,7 +145,7 @@ const App: React.FC = () => {
 
   const handleShare = (type: 'whatsapp' | 'sms' | 'copy') => {
     const url = window.location.origin + `/event/${routeMatch.code}`;
-    const text = `Join our event "${activeEvent?.name}" on SplitIt to track expenses: ${url}`;
+    const text = `Join my event "${activeEvent?.name}" on SplitIt: ${url}`;
     
     if (type === 'whatsapp') {
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
@@ -163,7 +163,7 @@ const App: React.FC = () => {
   if (routeMatch.type === 'home') {
     return (
       <div className="min-h-screen bg-white flex flex-col font-sans animate-in overflow-hidden relative">
-        <header className="p-8 absolute top-0 left-0 z-10">
+        <header className="p-6 sm:p-8 absolute top-0 left-0 z-10">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-xl shadow-lg shadow-indigo-100">
               <i className="fa-solid fa-receipt"></i>
@@ -171,45 +171,42 @@ const App: React.FC = () => {
             <div>
               <h1 className="text-xl font-black text-slate-900 tracking-tighter">splitIt</h1>
               <p className="text-[9px] font-bold text-slate-400 lowercase tracking-tight -mt-1 leading-none">
-                trips end. memories stay. debts don’t.
+                no more awkward math.
               </p>
             </div>
           </div>
         </header>
 
-        <main className="flex-1 flex flex-col items-center justify-center px-6 max-w-4xl mx-auto w-full text-center space-y-12 pt-20">
+        <main className="flex-1 flex flex-col items-center justify-center px-6 max-w-4xl mx-auto w-full text-center space-y-12 pt-20 sm:pt-0">
           <div className="space-y-6">
-            <h1 className="text-[48px] sm:text-[90px] font-[900] text-slate-900 tracking-tighter leading-[0.95] max-w-2xl mx-auto">
-              Stop doing <span className="text-indigo-600 italic">awkward</span> math.
+            <h1 className="text-[42px] sm:text-[80px] font-[900] text-slate-900 tracking-tighter leading-[0.95] max-w-2xl mx-auto">
+              Settle debts with <span className="text-indigo-600 italic">the squad</span>.
             </h1>
-            <p className="text-md sm:text-2xl font-medium text-slate-400 max-w-lg mx-auto leading-relaxed">
-              The cleanest way to split bills and settle debts with the squad.
+            <p className="text-md sm:text-xl font-medium text-slate-400 max-w-md mx-auto leading-relaxed">
+              Track expenses and clear dues instantly.
             </p>
           </div>
 
-          <div className="flex flex-col items-center gap-10 w-full">
-            <div className="relative group w-full max-w-xs">
-              <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full blur opacity-25 group-hover:opacity-40 transition duration-1000"></div>
-              <button 
-                onClick={() => navigate('/create')}
-                className="relative w-full px-8 py-5 bg-indigo-600 text-white rounded-full font-black text-xs uppercase tracking-widest shadow-2xl active:scale-95 transition-all hover:bg-indigo-700"
-              >
-                Start an Event
-              </button>
-            </div>
+          <div className="flex flex-col items-center gap-10 w-full max-w-xs">
+            <button 
+              onClick={() => navigate('/create')}
+              className="w-full px-8 py-5 bg-indigo-600 text-white rounded-full font-black text-xs uppercase tracking-widest shadow-2xl active:scale-95 transition-all hover:bg-indigo-700"
+            >
+              Start an Event
+            </button>
 
             {recentEvents.length > 0 && (
-              <div className="space-y-4 animate-in w-full px-4">
-                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Recent Events</p>
-                <div className="flex flex-wrap justify-center gap-3">
+              <div className="space-y-4 animate-in w-full">
+                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Recently Visited</p>
+                <div className="flex flex-wrap justify-center gap-2">
                   {recentEvents.map(event => (
                     <button 
                       key={event.code} 
                       onClick={() => navigate(`/event/${event.code}`)}
-                      className="px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black text-slate-700 hover:bg-white hover:border-indigo-100 hover:shadow-sm transition-all flex flex-col items-center min-w-[120px]"
+                      className="px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black text-slate-700 hover:bg-white hover:border-indigo-100 transition-all flex flex-col items-center min-w-[100px] max-w-[140px]"
                     >
-                      <span className="truncate w-full text-center">{event.name}</span>
-                      <span className="text-[8px] text-slate-300 uppercase mt-1">{event.code}</span>
+                      <span className="truncate w-full text-center uppercase tracking-tighter">{event.name}</span>
+                      <span className="text-[7px] text-slate-300 uppercase mt-0.5">{event.code}</span>
                     </button>
                   ))}
                 </div>
@@ -228,7 +225,7 @@ const App: React.FC = () => {
           <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-3xl mx-auto shadow-lg"><i className="fa-solid fa-receipt"></i></div>
           <div className="space-y-2">
             <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Name your squad</h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">What are we splitting today?</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">What's the occasion?</p>
           </div>
           <form onSubmit={handleCreate} className="space-y-4">
             <input 
@@ -237,7 +234,7 @@ const App: React.FC = () => {
               required
               value={newEventName}
               onChange={e => setNewEventName(e.target.value)}
-              placeholder="e.g. Goa Trip 2025"
+              placeholder="e.g. Dinner Party"
               className="w-full px-8 py-5 rounded-3xl bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white text-lg font-bold transition-all outline-none text-center"
             />
             <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-700 active:scale-95 transition-all">Create Event</button>
@@ -269,7 +266,7 @@ const App: React.FC = () => {
       {loading && !activeEvent ? (
         <div className="flex-1 flex flex-col items-center justify-center space-y-4">
           <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin"></div>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hydrating...</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Syncing...</p>
         </div>
       ) : activeEvent && (
         <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-6 space-y-6 animate-in pb-10">

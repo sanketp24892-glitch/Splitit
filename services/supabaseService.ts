@@ -52,12 +52,17 @@ export const fetchEventByCode = async (shortCode: string) => {
       id: event.id,
       name: event.name,
       shortCode: event.short_code,
-      participants: participants || [],
+      participants: (participants || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        upiId: p.upi_id // Mapping database upi_id to app upiId
+      })),
       expenses: (expenses || []).map(e => ({
         ...e,
         payerId: e.payer_id,
         participantIds: e.participant_ids,
-        date: new Date(e.created_at).getTime() // Using created_at as the primary timestamp
+        date: new Date(e.created_at).getTime()
       })),
       createdAt: new Date(event.created_at).getTime()
     };
@@ -73,7 +78,12 @@ export const fetchEventByCode = async (shortCode: string) => {
 export const addParticipant = async (eventId: string, p: Omit<Participant, 'id'>) => {
   const { data, error } = await supabase
     .from('participants')
-    .insert([{ ...p, event_id: eventId }])
+    .insert([{ 
+      name: p.name, 
+      avatar: p.avatar, 
+      upi_id: p.upiId || null, // Explicit mapping to database column upi_id
+      event_id: eventId 
+    }])
     .select()
     .single();
   
@@ -81,7 +91,10 @@ export const addParticipant = async (eventId: string, p: Omit<Participant, 'id'>
     console.error("Add Participant Error:", error);
     throw error;
   }
-  return data;
+  return {
+    ...data,
+    upiId: data.upi_id // Return mapped for UI
+  };
 };
 
 /**
@@ -144,4 +157,4 @@ export const subscribeToChanges = (eventId: string, onUpdate: () => void) => {
   return () => {
     supabase.removeChannel(channel);
   };
-};
+}
