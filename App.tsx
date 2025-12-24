@@ -7,7 +7,7 @@ import ExpenseForm from './components/ExpenseForm.tsx';
 import SettlementView from './components/SettlementView.tsx';
 import { calculateBalances, calculateSettlements } from './utils/calculation.ts';
 
-// Helper to generate a 6-character random ID for short URLs
+// Helper to generate a 6-character random ID for short URLs and unique event strings
 const generateShortId = () => {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -17,19 +17,21 @@ const generateShortId = () => {
   return result;
 };
 
-// Initialize Supabase client using environment variables
-const supabase = createClient(
-  process.env.SUPABASE_URL || 'https://yrlvjtnxusbgqeqgaonu.supabase.co',
-  process.env.SUPABASE_ANON_KEY || 'sb_publishable_bFgmsQkkShvZYtyLf7ASEA_I1J6Y3zw'
-);
+// Initialize Supabase client safely
+const getSupabase = () => {
+  const url = process.env.SUPABASE_URL || 'https://yrlvjtnxusbgqeqgaonu.supabase.co';
+  const key = process.env.SUPABASE_ANON_KEY || 'sb_publishable_bFgmsQkkShvZYtyLf7ASEA_I1J6Y3zw';
+  if (!url || !key) return null;
+  return createClient(url, key);
+};
 
 const App: React.FC = () => {
   const [events, setEvents] = useState<Record<string, SplitEvent>>({});
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
   const [newEventName, setNewEventName] = useState('');
   
-  // App states scoped to sharing and loading
-  const [activeTab, setActiveTab] = useState<'expenses' | 'settlement'>('expenses');
+  // App states
+  const [activeTab, setActiveTab] = useState<'overview' | 'settlement'>('overview');
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [shareStatus, setShareStatus] = useState<'idle' | 'saving' | 'copied' | 'error'>('idle');
   const [showShareModal, setShowShareModal] = useState(false);
@@ -40,41 +42,35 @@ const App: React.FC = () => {
 
   const getAvatar = (name: string) => `https://api.dicebear.com/7.x/initials/svg?seed=${name}&backgroundColor=4f46e5&textColor=ffffff`;
 
-  // Fetch Logic: On mount, check if URL contains a short trip ID and load it from Supabase
+  // Fetch Logic: Check for short trip ID in hash
   useEffect(() => {
     const loadInitialData = async () => {
-      // 1. Load local storage events
       const savedEvents = localStorage.getItem('splitit_multi_events');
       let currentEvents: Record<string, SplitEvent> = savedEvents ? JSON.parse(savedEvents) : {};
 
-      // 2. Check for short ID in hash (e.g., #/trip/abc123)
       const hash = window.location.hash;
       const shortIdMatch = hash.match(/#\/?trip\/([a-z0-9]{6})$/i);
+      const sb = getSupabase();
       
-      if (shortIdMatch && shortIdMatch[1]) {
+      if (shortIdMatch && shortIdMatch[1] && sb) {
         const tripSlug = shortIdMatch[1];
         setIsLoadingShared(true);
         try {
-          const { data, error } = await supabase
+          const { data, error } = await sb
             .from('trips')
             .select('trip_data')
             .eq('id', tripSlug)
             .single();
 
-          if (error) throw error;
-          
-          if (data && data.trip_data) {
+          if (!error && data?.trip_data) {
             const fetchedEvent = data.trip_data as SplitEvent;
-            // Use the remote event, ensure it's in our local dictionary
             const localId = fetchedEvent.id || tripSlug;
             currentEvents[localId] = fetchedEvent;
             setCurrentEventId(localId);
-            
-            // Clean up the URL hash after loading to provide a clean browsing experience
             window.history.replaceState(null, "", window.location.pathname);
           }
         } catch (err) {
-          console.error("Failed to fetch shared trip from Supabase:", err);
+          console.error("Supabase fetch error:", err);
         } finally {
           setIsLoadingShared(false);
         }
@@ -87,36 +83,26 @@ const App: React.FC = () => {
     loadInitialData();
   }, []);
 
-  // Sync state to local storage for persistence
   useEffect(() => {
     if (isInitialized) {
       localStorage.setItem('splitit_multi_events', JSON.stringify(events));
     }
   }, [events, isInitialized]);
 
-  // Helper for the currently viewed event
   const activeEvent = currentEventId ? events[currentEventId] : null;
 
-  // Compute balances and settlements whenever active event changes
   const { balances, settlements, totalSpent } = useMemo(() => {
     if (!activeEvent) return { balances: [], settlements: [], totalSpent: 0 };
-    
     const bals = calculateBalances(activeEvent.participants, activeEvent.expenses);
     const setts = calculateSettlements([...bals]);
     const total = activeEvent.expenses.reduce((acc, curr) => curr.category !== 'Payment' ? acc + curr.amount : acc, 0);
-
-    return { 
-      balances: bals, 
-      settlements: setts, 
-      totalSpent: total
-    };
+    return { balances: bals, settlements: setts, totalSpent: total };
   }, [activeEvent]);
 
-  // Event Handlers
   const createEvent = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEventName.trim()) return;
-    const id = crypto.randomUUID();
+    const id = generateShortId();
     const newEv: SplitEvent = {
       id,
       name: newEventName.trim(),
@@ -130,7 +116,7 @@ const App: React.FC = () => {
   };
 
   const deleteEvent = (id: string) => {
-    if (window.confirm("Delete this group session permanently?")) {
+    if (window.confirm("Permanently delete this group?")) {
       const newEvents = { ...events };
       delete newEvents[id];
       setEvents(newEvents);
@@ -186,18 +172,23 @@ const App: React.FC = () => {
     });
   };
 
-  // Save Logic: Save to Supabase and generate short URL
   const handleShareToSupabase = async () => {
     if (!shareEventId || !events[shareEventId]) return;
     
     setShareStatus('saving');
+    const sb = getSupabase();
+    if (!sb) {
+      setShareStatus('error');
+      return;
+    }
+
     const targetEvent = events[shareEventId];
-    const shortId = generateShortId();
+    const shortId = targetEvent.id;
     
     try {
-      const { error } = await supabase
+      const { error } = await sb
         .from('trips')
-        .insert([{ 
+        .upsert([{ 
           id: shortId,
           trip_data: targetEvent,
           name: targetEvent.name 
@@ -205,11 +196,11 @@ const App: React.FC = () => {
 
       if (error) throw error;
       
-      const shortUrl = `https://splitits.in/#/trip/${shortId}`;
+      const shortUrl = `${window.location.origin}/#/trip/${shortId}`;
       setGeneratedShortUrl(shortUrl);
       setShareStatus('idle');
     } catch (err) {
-      console.error("Supabase Save Error:", err);
+      console.error("Supabase Sync Error:", err);
       setShareStatus('error');
     }
   };
@@ -222,23 +213,38 @@ const App: React.FC = () => {
     setShowShareModal(true);
   };
 
-  const handleShareWhatsApp = () => {
-    if (!generatedShortUrl || !shareEventId) return;
-    const ev = events[shareEventId];
-    
-    // Construct settlement summary
+  const getWhatsAppText = () => {
+    if (!activeEvent) return '';
     const settlementText = settlements.length === 0 
       ? "All clear! No pending payments. ✅" 
       : settlements.map(s => {
-          const fromName = ev.participants.find(p => p.id === s.from)?.name;
-          const toName = ev.participants.find(p => p.id === s.to)?.name;
+          const fromName = activeEvent.participants.find(p => p.id === s.from)?.name;
+          const toName = activeEvent.participants.find(p => p.id === s.to)?.name;
           return `💸 *${fromName}* owes *${toName}*: ₹${s.amount.toFixed(2)}`;
         }).join('\n');
     
-    // Construct the final message with the requested tagline
-    const text = `💰 *SplitIt: ${ev.name}*\n\n*Current Settlements:*\n${settlementText}\n\n🔗 Open trip and settle:\n${generatedShortUrl}\n\nNo more awkward money talks! SplitIt handles it all for you.\nTry it Now: splitits.in`;
-    
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+    return `💰 *SplitIt: ${activeEvent.name}*\n\n*Current Settlements:*\n${settlementText}\n\n🔗 Open trip and settle:\n${generatedShortUrl}\n\nNo more awkward money talks! SplitIt handles it all for you.\nTry it Now: splitits.in`;
+  };
+
+  const handleShareWhatsApp = () => {
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(getWhatsAppText())}`, '_blank');
+  };
+
+  const handleShareGmail = () => {
+    const subject = `Expense Split for ${activeEvent?.name}`;
+    window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(getWhatsAppText())}`, '_blank');
+  };
+
+  const handleShareArattai = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: `SplitIt: ${activeEvent?.name}`,
+        text: getWhatsAppText(),
+        url: generatedShortUrl || ''
+      }).catch(console.error);
+    } else {
+      alert("Sharing via Arattai is best supported on mobile. Please copy the link instead.");
+    }
   };
 
   const handleCopyLink = () => {
@@ -249,310 +255,172 @@ const App: React.FC = () => {
     });
   };
 
-  // Loading Screen for Init or DB Fetch
   if (!isInitialized || isLoadingShared) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center font-sans">
         <div className="w-12 h-12 border-4 border-slate-100 border-t-[#4f46e5] rounded-full animate-spin mb-4"></div>
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">
-          {isLoadingShared ? 'Fetching shared trip...' : 'Initializing SplitIt...'}
-        </p>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Fetching Trip...</p>
       </div>
     );
   }
 
-  // Dashboard View: Shown when no specific event is selected
+  // Dashboard
   if (!currentEventId) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans">
-        <header className="bg-white border-b border-slate-100 p-6 sm:p-8 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-             <div className="w-10 h-10 bg-[#4f46e5] rounded-xl flex items-center justify-center text-white text-2xl shadow-lg shadow-indigo-100 transition-transform hover:rotate-6">
-               <i className="fa-solid fa-money-bill-transfer"></i>
+        <header className="bg-white border-b border-slate-100 p-6 sm:p-8 flex items-start">
+          <div className="flex items-center gap-3 sm:gap-4">
+             <div className="w-12 h-12 bg-[#4f46e5] rounded-2xl flex items-center justify-center text-white text-3xl shadow-lg shadow-indigo-100">
+               <i className="fa-solid fa-receipt"></i>
              </div>
-             <h1 className="text-2xl font-black text-slate-800 tracking-tight">SplitIt</h1>
-          </div>
-          <div className="hidden sm:block">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 border border-slate-100 px-4 py-1.5 rounded-full">Dashboard</span>
+             <div className="flex flex-col items-start text-left">
+               <h1 className="text-3xl font-black text-slate-900 tracking-tighter">SplitIt</h1>
+               <p className="text-xs font-medium text-slate-400 lowercase -mt-1 tracking-tight">good times in, awkward math out.</p>
+             </div>
           </div>
         </header>
 
-        <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-8 sm:py-20 space-y-12 animate-in fade-in duration-700">
-          <section className="bg-white rounded-[3rem] p-8 sm:p-16 shadow-2xl shadow-indigo-100/40 border border-slate-50 text-center space-y-10">
-            <div className="space-y-4">
-              <h2 className="text-4xl sm:text-5xl font-black text-slate-800 tracking-tight leading-tight">Split expenses, <br/><span className="text-[#4f46e5]">keep the friendship.</span></h2>
-              <p className="text-slate-400 font-medium text-lg max-w-lg mx-auto">Toss your paper receipts. splitIt tracks everything so you don't have to.</p>
-            </div>
-            
-            <form onSubmit={createEvent} className="max-w-md mx-auto relative group">
+        <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-10 sm:py-20 space-y-12">
+          <section className="bg-white rounded-[2.5rem] p-8 sm:p-16 shadow-2xl shadow-indigo-100/40 border border-slate-50 text-center space-y-10">
+            <h2 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">Start an Event</h2>
+            <form onSubmit={createEvent} className="max-w-md mx-auto flex flex-col gap-4">
               <input 
                 type="text" 
                 value={newEventName}
                 onChange={e => setNewEventName(e.target.value)}
-                placeholder="Name your adventure (e.g. Goa 2024)"
-                className="w-full px-8 py-5 rounded-[2rem] bg-slate-50 border-2 border-transparent focus:border-[#4f46e5] focus:bg-white text-lg font-bold transition-all outline-none pr-36 shadow-inner"
+                placeholder="Event Name (e.g. Goa Trip)"
+                className="w-full px-8 py-5 rounded-3xl bg-slate-50 border-2 border-transparent focus:border-[#4f46e5] focus:bg-white text-lg font-bold transition-all outline-none shadow-inner"
               />
-              <button 
-                type="submit"
-                className="absolute right-2 top-2 bottom-2 bg-[#4f46e5] text-white px-8 rounded-[1.5rem] font-black text-sm hover:bg-[#4338ca] transition-all shadow-lg active:scale-95"
-              >
-                CREATE
-              </button>
+              <button type="submit" className="bg-[#4f46e5] text-white py-5 rounded-3xl font-black text-sm hover:bg-[#4338ca] transition-all shadow-xl active:scale-95 uppercase tracking-widest">Create an Event</button>
             </form>
           </section>
 
           {Object.keys(events).length > 0 && (
-            <section className="space-y-6">
-              <div className="flex items-center justify-between px-2">
-                <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Recent Groups</h3>
-                <span className="text-xs font-bold text-[#4f46e5] bg-[#eef2ff] px-3 py-1 rounded-full">{Object.keys(events).length} Sessions</span>
-              </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {(Object.values(events) as SplitEvent[]).sort((a, b) => b.createdAt - a.createdAt).map((ev) => {
-                  const evTotal = ev.expenses.reduce((acc, curr) => curr.category !== 'Payment' ? acc + curr.amount : acc, 0);
-                  return (
-                    <div 
-                      key={ev.id}
-                      onClick={() => setCurrentEventId(ev.id)}
-                      className="group bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-2xl hover:border-[#4f46e5]/20 hover:-translate-y-2 transition-all cursor-pointer flex flex-col justify-between min-h-[240px]"
-                    >
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-start">
-                          <div className="w-12 h-12 bg-[#eef2ff] text-[#4f46e5] rounded-2xl flex items-center justify-center text-xl font-black group-hover:bg-[#4f46e5] group-hover:text-white transition-all duration-300">
-                            {ev.name.charAt(0)}
-                          </div>
-                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={(e) => openShareModal(e, ev.id)} className="w-9 h-9 rounded-xl bg-slate-50 text-slate-400 hover:text-[#4f46e5] hover:bg-white flex items-center justify-center transition-all border border-transparent hover:border-slate-100"><i className="fa-solid fa-share-nodes text-xs"></i></button>
-                            <button onClick={(e) => { e.stopPropagation(); deleteEvent(ev.id); }} className="w-9 h-9 rounded-xl bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-white flex items-center justify-center transition-all border border-transparent hover:border-slate-100"><i className="fa-solid fa-trash-can text-xs"></i></button>
-                          </div>
-                        </div>
-                        <div>
-                          <h4 className="text-xl font-black text-slate-800 line-clamp-1 group-hover:text-[#4f46e5] transition-colors">{ev.name}</h4>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 tracking-wider">{ev.participants.length} Members • {ev.expenses.length} Records</p>
-                        </div>
-                      </div>
-                      <div className="pt-5 border-t border-slate-50 flex items-end justify-between">
-                         <div>
-                            <span className="block text-[8px] font-black text-slate-300 uppercase tracking-widest mb-1">Total Spent</span>
-                            <span className="text-2xl font-black text-slate-800">₹{evTotal.toFixed(0)}</span>
-                         </div>
-                         <div className="w-10 h-10 rounded-full border border-slate-100 flex items-center justify-center text-slate-300 group-hover:text-[#4f46e5] group-hover:border-[#4f46e5] transition-all">
-                           <i className="fa-solid fa-chevron-right text-xs"></i>
-                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {(Object.values(events) as SplitEvent[]).sort((a,b)=>b.createdAt-a.createdAt).map(ev => (
+                <div key={ev.id} onClick={()=>setCurrentEventId(ev.id)} className="bg-white p-6 rounded-[2rem] border border-slate-100 hover:shadow-xl transition-all cursor-pointer group">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black">{ev.name.charAt(0)}</div>
+                    <button onClick={(e)=>{e.stopPropagation(); deleteEvent(ev.id)}} className="text-slate-200 hover:text-red-500 transition-colors p-2"><i className="fa-solid fa-trash-can"></i></button>
+                  </div>
+                  <h4 className="text-xl font-black text-slate-800 line-clamp-1">{ev.name}</h4>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 tracking-widest">{ev.participants.length} Members • ₹{ev.expenses.reduce((acc,curr)=>curr.category!=='Payment'?acc+curr.amount:acc,0).toFixed(0)}</p>
+                </div>
+              ))}
+            </div>
           )}
         </main>
       </div>
     );
   }
 
-  // Active Trip Management View
+  // Active View
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans overflow-x-hidden">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans">
       <header className="bg-white border-b border-slate-100 sticky top-0 z-30 shadow-sm px-4">
         <div className="max-w-7xl mx-auto h-20 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4 min-w-0">
-            <button 
-              onClick={() => setCurrentEventId(null)}
-              className="w-10 h-10 rounded-xl hover:bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-800 transition-all border border-transparent hover:border-slate-100"
-            >
-              <i className="fa-solid fa-arrow-left"></i>
-            </button>
-            <div className="flex flex-col min-w-0">
-              <h1 className="text-lg font-black text-[#1e293b] truncate uppercase tracking-tight">{activeEvent.name}</h1>
-              <div className="flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>
-                <p className="text-[9px] font-black text-slate-400 tracking-[0.1em] uppercase">Cloud Sync Active</p>
-              </div>
+            <button onClick={()=>setCurrentEventId(null)} className="w-10 h-10 rounded-xl hover:bg-slate-50 flex items-center justify-center text-slate-400"><i className="fa-solid fa-arrow-left"></i></button>
+            <div className="min-w-0">
+              <h1 className="text-lg font-black text-slate-900 truncate uppercase tracking-tight">{activeEvent.name}</h1>
+              <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase -mt-0.5">SplitIt Safe</p>
             </div>
           </div>
-          <nav className="flex bg-[#f1f5f9] p-1.5 rounded-2xl shrink-0">
-            <button onClick={() => setActiveTab('expenses')} className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === 'expenses' ? 'bg-white text-[#4f46e5] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Activity</button>
-            <button onClick={() => setActiveTab('settlement')} className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${activeTab === 'settlement' ? 'bg-white text-[#4f46e5] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Settlement</button>
+          <nav className="flex bg-slate-100 p-1 rounded-xl">
+            <button onClick={()=>setActiveTab('overview')} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${activeTab==='overview'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>Overview</button>
+            <button onClick={()=>setActiveTab('settlement')} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${activeTab==='settlement'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>Settlement</button>
           </nav>
         </div>
       </header>
 
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-10 space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-        <div className="flex flex-col sm:flex-row items-center justify-between bg-white px-8 py-6 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-100/50 gap-6">
-          <div className="flex gap-12 text-center sm:text-left">
-            <div>
-              <span className="text-[9px] font-black text-slate-400 uppercase block mb-1 tracking-widest">Aggregate Spent</span>
-              <p className="text-3xl font-black text-slate-800">₹{totalSpent.toFixed(0)}</p>
-            </div>
-            <div>
-              <span className="text-[9px] font-black text-slate-400 uppercase block mb-1 tracking-widest">The Squad</span>
-              <p className="text-3xl font-black text-slate-800">{activeEvent.participants.length}</p>
-            </div>
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8 space-y-8 animate-in fade-in duration-500">
+        <div className="flex flex-col items-stretch justify-between bg-white px-8 py-6 rounded-[2rem] border border-slate-100 shadow-lg shadow-slate-100/50 gap-6 sm:flex-row sm:items-center">
+          <div className="flex justify-around sm:justify-start gap-12 text-center sm:text-left">
+            <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Spent</span><p className="text-3xl font-black">₹{totalSpent.toFixed(0)}</p></div>
+            <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Squad</span><p className="text-3xl font-black">{activeEvent.participants.length}</p></div>
           </div>
-          <button 
-            onClick={(e) => openShareModal(e, activeEvent.id)}
-            className="w-full sm:w-auto flex items-center justify-center gap-3 px-10 py-5 rounded-2xl text-xs font-black uppercase tracking-widest transition-all bg-[#4f46e5] text-white hover:bg-[#4338ca] shadow-xl shadow-indigo-200 active:scale-[0.97]"
-          >
-            <i className="fa-solid fa-cloud-arrow-up"></i>
-            Cloud Sync & Share
-          </button>
+          <button onClick={(e)=>openShareModal(e, activeEvent.id)} className="bg-[#4f46e5] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#4338ca] shadow-lg active:scale-95">Share with Squad</button>
         </div>
 
-        {activeTab === 'expenses' ? (
+        {activeTab === 'overview' ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-3">
-              <ParticipantManager participants={activeEvent.participants} onAdd={addParticipant} onRemove={removeParticipant} />
-            </div>
-            <div className="lg:col-span-5 space-y-6">
-              <div className="flex justify-between items-center px-2">
-                <h2 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                  <i className="fa-solid fa-list-check"></i>
-                  Recent Transactions
-                </h2>
-                <span className="text-[10px] font-bold text-[#4f46e5] bg-[#eef2ff] px-3 py-1 rounded-full">{activeEvent.expenses.length} Total</span>
-              </div>
-              <div className="min-h-[400px] bg-white border border-slate-100 rounded-[2rem] p-4 overflow-y-auto max-h-[650px] scrollbar-hide shadow-sm">
-                {activeEvent.expenses.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center text-slate-300 py-24 gap-4">
-                    <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center"><i className="fa-solid fa-receipt text-2xl"></i></div>
-                    <p className="text-xs font-bold uppercase tracking-widest">No activity recorded yet</p>
-                  </div>
-                ) : (
-                  activeEvent.expenses.sort((a,b) => b.date - a.date).map(e => (
-                    <div 
-                      key={e.id} 
-                      onClick={() => setSelectedExpense(e)} 
-                      className={`p-5 mb-4 rounded-2xl border transition-all cursor-pointer group ${e.category === 'Payment' ? 'bg-slate-50/50 border-slate-100 border-dashed' : 'bg-white border-slate-50 hover:border-[#4f46e5] hover:shadow-lg hover:shadow-indigo-50'}`}
-                    >
-                      <div className="flex justify-between items-center">
-                        <div className="min-w-0 flex items-center gap-4">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${e.category === 'Payment' ? 'text-green-500 bg-green-50' : 'text-slate-400 bg-slate-50'}`}>
-                             <i className={`fa-solid ${e.category === 'Payment' ? 'fa-hand-holding-dollar' : 'fa-receipt'}`}></i>
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-black text-slate-800 truncate group-hover:text-[#4f46e5] transition-colors">{e.description}</p>
-                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
-                              <span className="text-slate-600">{activeEvent.participants.find(p=>p.id===e.payerId)?.name}</span> paid • {new Date(e.date).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="font-black text-slate-800 text-lg">₹{e.amount.toFixed(0)}</p>
-                          <p className="text-[8px] text-slate-300 font-black uppercase tracking-widest">{e.category}</p>
-                        </div>
+            <div className="lg:col-span-3 order-2 lg:order-1"><ParticipantManager participants={activeEvent.participants} onAdd={addParticipant} onRemove={removeParticipant} /></div>
+            <div className="lg:col-span-5 space-y-6 order-3 lg:order-2">
+              <div className="bg-white border border-slate-100 rounded-[2rem] p-4 min-h-[400px] shadow-sm overflow-hidden">
+                <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 p-4 border-b border-slate-50 mb-4 flex items-center gap-2"><i className="fa-solid fa-clock-rotate-left"></i>History</h2>
+                <div className="space-y-4 max-h-[600px] overflow-y-auto scrollbar-hide">
+                  {activeEvent.expenses.length === 0 ? <div className="text-center py-20 text-slate-300 font-bold uppercase text-[10px]">No records found</div> : 
+                    activeEvent.expenses.sort((a,b)=>b.date-a.date).map(e => (
+                      <div key={e.id} onClick={()=>setSelectedExpense(e)} className={`p-4 mx-2 rounded-2xl border transition-all cursor-pointer ${e.category==='Payment'?'bg-green-50/50 border-green-100 italic':'bg-white border-slate-50 hover:border-indigo-100 hover:bg-slate-50'}`}>
+                        <div className="flex justify-between items-center"><div className="min-w-0"><p className="font-bold text-slate-800 truncate">{e.description}</p><p className="text-[9px] text-slate-400 font-bold uppercase">{activeEvent.participants.find(p=>p.id===e.payerId)?.name} paid</p></div><p className="font-black text-slate-900">₹{e.amount.toFixed(0)}</p></div>
                       </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  }
+                </div>
               </div>
             </div>
-            <div className="lg:col-span-4">
-              <ExpenseForm participants={activeEvent.participants} onAdd={addExpense} />
-            </div>
+            <div className="lg:col-span-4 order-1 lg:order-3"><ExpenseForm participants={activeEvent.participants} onAdd={addExpense} /></div>
           </div>
         ) : (
           <SettlementView participants={activeEvent.participants} balances={balances} settlements={settlements} totalSpent={totalSpent} onSettle={handleSettle} />
         )}
       </main>
 
-      {/* Cloud Sync & Share Modal */}
       {showShareModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white rounded-[3rem] max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden">
-            <div className="p-10 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <div>
-                <h3 className="text-2xl font-black text-slate-800 tracking-tight">Cloud Sync</h3>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Get your unique short link</p>
-              </div>
-              <button 
-                onClick={() => setShowShareModal(false)} 
-                className="w-10 h-10 rounded-full hover:bg-white flex items-center justify-center text-slate-300 hover:text-slate-600 transition-all border border-transparent hover:border-slate-100"
-              >
-                <i className="fa-solid fa-xmark text-lg"></i>
-              </button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl overflow-hidden animate-in zoom-in-95">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h3 className="text-xl font-black text-slate-800">Share with Squad</h3>
+              <button onClick={()=>setShowShareModal(false)} className="text-slate-400 hover:text-slate-800"><i className="fa-solid fa-xmark"></i></button>
             </div>
-            
-            <div className="p-10 space-y-8">
+            <div className="p-8 space-y-6">
               {shareStatus === 'saving' ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-6">
-                  <div className="w-16 h-16 border-[6px] border-slate-100 border-t-[#4f46e5] rounded-full animate-spin shadow-inner"></div>
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] animate-pulse">Pushing to Cloud...</p>
-                </div>
+                <div className="flex flex-col items-center py-10 gap-4"><div className="w-10 h-10 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin"></div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preparing Link...</p></div>
               ) : generatedShortUrl ? (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="p-6 bg-slate-50 rounded-[2rem] border border-slate-100 text-center relative overflow-hidden group">
-                    <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest block mb-2">Short Link Generated</span>
-                    <p className="text-sm font-bold text-[#4f46e5] truncate px-4">{generatedShortUrl}</p>
-                    <div className="absolute inset-0 bg-[#4f46e5]/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <button onClick={handleShareWhatsApp} className="flex flex-col items-center gap-3 p-6 rounded-[2rem] bg-green-50 hover:bg-green-100 transition-all border border-green-100 group">
-                      <div className="w-14 h-14 bg-green-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-green-100 group-hover:scale-110 transition-transform"><i className="fa-brands fa-whatsapp text-2xl"></i></div>
-                      <span className="text-[10px] font-black text-green-700 uppercase tracking-widest">WhatsApp</span>
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center"><p className="text-xs font-bold text-indigo-600 truncate">{generatedShortUrl}</p></div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={handleShareWhatsApp} className="flex flex-col items-center gap-2 p-5 bg-green-50 rounded-3xl hover:bg-green-100 transition-all">
+                      <div className="w-12 h-12 bg-green-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-green-100"><i className="fa-brands fa-whatsapp"></i></div>
+                      <span className="text-[10px] font-black uppercase text-green-700">WhatsApp</span>
                     </button>
-                    <button onClick={handleCopyLink} className={`flex flex-col items-center gap-3 p-6 rounded-[2rem] transition-all border group ${shareStatus === 'copied' ? 'bg-green-100 border-green-200' : 'bg-slate-50 border-slate-100 hover:bg-slate-100'}`}>
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg transition-all group-hover:scale-110 ${shareStatus === 'copied' ? 'bg-green-600 shadow-green-100' : 'bg-slate-800 shadow-slate-100'}`}>
-                        <i className={`fa-solid ${shareStatus === 'copied' ? 'fa-check' : 'fa-link-slash'} text-xl`}></i>
-                      </div>
-                      <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest">{shareStatus === 'copied' ? 'Success' : 'Copy'}</span>
+                    <button onClick={handleShareGmail} className="flex flex-col items-center gap-2 p-5 bg-red-50 rounded-3xl hover:bg-red-100 transition-all">
+                      <div className="w-12 h-12 bg-red-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-red-100"><i className="fa-solid fa-envelope"></i></div>
+                      <span className="text-[10px] font-black uppercase text-red-700">Gmail</span>
+                    </button>
+                    <button onClick={handleShareArattai} className="flex flex-col items-center gap-2 p-5 bg-blue-50 rounded-3xl hover:bg-blue-100 transition-all">
+                      <div className="w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-blue-100"><i className="fa-solid fa-share-nodes"></i></div>
+                      <span className="text-[10px] font-black uppercase text-blue-700">Arattai</span>
+                    </button>
+                    <button onClick={handleCopyLink} className={`flex flex-col items-center gap-2 p-5 rounded-3xl transition-all ${shareStatus==='copied'?'bg-green-100':'bg-slate-50 hover:bg-slate-100'}`}>
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg ${shareStatus==='copied'?'bg-green-600':'bg-slate-800'}`}><i className={`fa-solid ${shareStatus==='copied'?'fa-check':'fa-link'}`}></i></div>
+                      <span className="text-[10px] font-black uppercase text-slate-700">{shareStatus==='copied'?'Copied':'Copy Link'}</span>
                     </button>
                   </div>
                 </div>
               ) : (
-                <button 
-                  onClick={handleShareToSupabase}
-                  className="w-full bg-[#4f46e5] text-white py-6 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-indigo-200 hover:bg-[#4338ca] hover:-translate-y-1 transition-all active:scale-[0.98]"
-                >
-                  Generate Private Link
-                </button>
+                <button onClick={handleShareToSupabase} className="w-full bg-[#4f46e5] text-white py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-[#4338ca] transition-all">Sync & Generate Link</button>
               )}
-              {shareStatus === 'error' && (
-                <div className="p-4 bg-red-50 rounded-xl border border-red-100 text-center">
-                  <p className="text-[9px] text-red-500 font-black uppercase tracking-widest">Connection lost. Please check credentials.</p>
-                </div>
-              )}
-            </div>
-            <div className="p-8 bg-slate-50/80 text-center border-t border-slate-100">
-              <p className="text-[8px] text-slate-400 font-black uppercase tracking-[0.3em] flex items-center justify-center gap-2">
-                <i className="fa-solid fa-shield-halved text-[#4f46e5]"></i>
-                End-to-End Persistence
-              </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Detail & Deletion Modal */}
       {selectedExpense && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2.5rem] max-w-lg w-full overflow-hidden shadow-2xl p-10 space-y-8 animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center">
-               <h3 className="text-2xl font-black text-slate-800 tracking-tight">Transaction Info</h3>
-               <button onClick={() => setSelectedExpense(null)} className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-800 transition-all"><i className="fa-solid fa-xmark"></i></button>
-            </div>
-            <div className="space-y-6">
-              <div className="flex justify-between items-center pb-6 border-b border-slate-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <div className="bg-white rounded-[2.5rem] max-w-lg w-full p-8 space-y-6 shadow-2xl animate-in zoom-in-95">
+            <div className="flex justify-between items-center"><h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Record Detail</h3><button onClick={()=>setSelectedExpense(null)} className="text-slate-400 hover:text-slate-800"><i className="fa-solid fa-xmark"></i></button></div>
+            <div className="space-y-4 pt-4 border-t border-slate-50">
+              <div className="flex justify-between">
                 <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Label</span>
-                <span className="font-black text-xl text-slate-800">{selectedExpense.description}</span>
+                <span className="font-bold text-slate-800">{selectedExpense.description}</span>
               </div>
-              <div className="flex justify-between items-center pb-6 border-b border-slate-50">
-                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Value</span>
-                <span className="font-black text-3xl text-[#4f46e5]">₹{selectedExpense.amount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between items-center pb-6 border-b border-slate-50">
-                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Payer</span>
-                <span className="font-black text-slate-800">{activeEvent.participants.find(p=>p.id===selectedExpense.payerId)?.name}</span>
+              <div className="flex justify-between">
+                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Amount</span>
+                <span className="font-black text-indigo-600 text-2xl">₹{selectedExpense.amount.toFixed(2)}</span>
               </div>
             </div>
-            <button 
-              onClick={() => removeExpense(selectedExpense.id)} 
-              className="w-full py-5 bg-red-50 text-red-500 font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-red-100 transition-all flex items-center justify-center gap-3 border border-red-100"
-            >
-              <i className="fa-solid fa-trash-can"></i>
-              Void Record
-            </button>
+            <button onClick={()=>{removeExpense(selectedExpense.id); setSelectedExpense(null);}} className="w-full py-5 bg-red-50 text-red-500 font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-red-100 transition-all border border-red-100"><i className="fa-solid fa-trash-can mr-2"></i>Delete Record</button>
           </div>
         </div>
       )}
