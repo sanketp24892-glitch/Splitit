@@ -38,7 +38,6 @@ const App: React.FC = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
-  // Router logic with URL sharing hydration
   useEffect(() => {
     const handleLocationChange = () => {
       const params = new URLSearchParams(window.location.search);
@@ -89,10 +88,11 @@ const App: React.FC = () => {
     const eventMatch = path.match(/^\/event\/([a-z0-9]{6})(\/settlement|\/expenses)?$/);
     if (eventMatch) {
       const sub = eventMatch[2];
+      // Note: sub === '/expenses' now also points to overview because expense tab is removed
       return { 
         type: 'event', 
         id: eventMatch[1], 
-        tab: sub === '/settlement' ? 'settlement' : (sub === '/expenses' ? 'expenses' : 'overview') 
+        tab: sub === '/settlement' ? 'settlement' : 'overview' 
       };
     }
     return { type: 'home' };
@@ -102,7 +102,6 @@ const App: React.FC = () => {
 
   const { balances, settlements, totalSpent } = useMemo(() => {
     if (!activeEvent) return { balances: [], settlements: [], totalSpent: 0 };
-    // Map to new objects to prevent calculation mutations from affecting state
     const safeBals = calculateBalances(activeEvent.participants, activeEvent.expenses).map(b => ({...b}));
     const setts = calculateSettlements(safeBals);
     const total = activeEvent.expenses.reduce((acc, curr) => curr.category !== 'Payment' ? acc + curr.amount : acc, 0);
@@ -123,24 +122,35 @@ const App: React.FC = () => {
     navigate(`/event/${id}`);
   };
 
-  const handleShortenShare = async () => {
-    if (!activeEvent) return;
-    setShareStatus('shortening');
+  const getShareUrl = async () => {
+    if (!activeEvent) return "";
     const longUrl = `${window.location.origin}/event/${activeEvent.id}?trip=${serializeEvent(activeEvent)}`;
     try {
       const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
-      if (res.ok) {
-        const short = await res.text();
-        await navigator.clipboard.writeText(short);
-        setShareStatus('copied');
-      } else {
-        throw new Error();
-      }
+      return res.ok ? await res.text() : longUrl;
     } catch {
-      await navigator.clipboard.writeText(longUrl);
-      setShareStatus('copied');
+      return longUrl;
     }
+  };
+
+  const handleCopyLink = async () => {
+    setShareStatus('shortening');
+    const url = await getShareUrl();
+    await navigator.clipboard.writeText(url);
+    setShareStatus('copied');
     setTimeout(() => setShareStatus('idle'), 2000);
+  };
+
+  const handleShareWhatsApp = async () => {
+    const url = await getShareUrl();
+    const text = `Join my squad on SplitIt for "${activeEvent?.name}": ${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const handleShareSMS = async () => {
+    const url = await getShareUrl();
+    const text = `Join my squad on SplitIt for "${activeEvent?.name}": ${url}`;
+    window.open(`sms:?body=${encodeURIComponent(text)}`, '_blank');
   };
 
   const BrandingFooter = () => (
@@ -267,8 +277,7 @@ const App: React.FC = () => {
           </div>
           <nav className="flex bg-slate-100 p-1 rounded-xl">
             <button onClick={()=>navigate(`/event/${activeEvent.id}`)} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${routeMatch.tab==='overview'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>OVERVIEW</button>
-            <button onClick={()=>navigate(`/event/${activeEvent.id}/expenses`)} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${routeMatch.tab==='expenses'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>EXPENSES</button>
-            <button onClick={()=>navigate(`/event/${activeEvent.id}/settlement`)} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${routeMatch.tab==='settlement'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>SETTLE</button>
+            <button onClick={()=>navigate(`/event/${activeEvent.id}/settlement`)} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${routeMatch.tab==='settlement'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>SETTLEMENT</button>
           </nav>
         </div>
       </header>
@@ -279,10 +288,10 @@ const App: React.FC = () => {
             <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Spent</span><p className="text-3xl font-black">₹{totalSpent.toFixed(0)}</p></div>
             <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Squad</span><p className="text-3xl font-black">{activeEvent.participants.length}</p></div>
           </div>
-          <button onClick={()=>setShowShareModal(true)} className="w-full sm:w-auto bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">Invite Friends</button>
+          <button onClick={()=>setShowShareModal(true)} className="w-full sm:w-auto bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">Share with Squad</button>
         </div>
 
-        {routeMatch.tab === 'overview' || routeMatch.tab === 'expenses' ? (
+        {routeMatch.tab === 'overview' ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             <div className="lg:col-span-3 order-1"><ParticipantManager participants={activeEvent.participants} onAdd={(n, u)=>setEvents(prev => ({ ...prev, [activeEvent.id]: { ...activeEvent, participants: [...activeEvent.participants, { id: crypto.randomUUID(), name: n, upiId: u, avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${n}&backgroundColor=4f46e5&textColor=ffffff` }] }}))} onRemove={(id)=>setEvents(prev => ({ ...prev, [activeEvent.id]: { ...activeEvent, participants: activeEvent.participants.filter(p=>p.id!==id) }}))} /></div>
             <div className="lg:col-span-5 order-3 lg:order-2 space-y-6">
@@ -322,19 +331,31 @@ const App: React.FC = () => {
           <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl overflow-hidden animate-in zoom-in-95">
             <div className="p-10 border-b border-slate-100 flex flex-col items-center bg-slate-50/50 text-center">
               <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-3xl mb-4 shadow-xl shadow-indigo-100"><i className="fa-solid fa-link"></i></div>
-              <h3 className="text-xl font-black text-slate-900">Invite Squad</h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Anyone with this link can view & edit</p>
+              <h3 className="text-xl font-black text-slate-900">Share with Squad</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Spread the word via your favorite app</p>
             </div>
-            <div className="p-8 space-y-4">
+            <div className="p-8 space-y-3">
               <button 
-                onClick={handleShortenShare}
+                onClick={handleShareWhatsApp}
+                className="w-full flex items-center justify-center gap-3 py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all shadow-md active:scale-95 bg-green-500 text-white hover:bg-green-600"
+              >
+                <i className="fa-brands fa-whatsapp text-lg"></i> WhatsApp
+              </button>
+              <button 
+                onClick={handleShareSMS}
+                className="w-full flex items-center justify-center gap-3 py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all shadow-md active:scale-95 bg-indigo-500 text-white hover:bg-indigo-600"
+              >
+                <i className="fa-solid fa-comment-sms text-lg"></i> Text Message
+              </button>
+              <button 
+                onClick={handleCopyLink}
                 disabled={shareStatus === 'shortening'}
-                className={`w-full flex items-center justify-center gap-3 py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all shadow-xl active:scale-95 ${shareStatus==='copied' ? 'bg-green-500 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                className={`w-full flex items-center justify-center gap-3 py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all shadow-md active:scale-95 border-2 border-indigo-600 ${shareStatus==='copied' ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 hover:bg-indigo-50'}`}
               >
                 {shareStatus === 'shortening' ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className={`fa-solid ${shareStatus==='copied'?'fa-check':'fa-copy'}`}></i>}
-                {shareStatus === 'shortening' ? 'Generating Short Link...' : shareStatus === 'copied' ? 'Link Copied!' : 'Copy Shareable Link'}
+                {shareStatus === 'shortening' ? 'Generating...' : shareStatus === 'copied' ? 'Link Copied!' : 'Copy Link'}
               </button>
-              <button onClick={() => setShowShareModal(false)} className="w-full py-2 text-[10px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-500 transition-colors">Dismiss</button>
+              <button onClick={() => setShowShareModal(false)} className="w-full py-2 mt-4 text-[10px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-500 transition-colors">Dismiss</button>
             </div>
           </div>
         </div>

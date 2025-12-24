@@ -66,38 +66,35 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                 const payer = getParticipant(s.from);
                 const receiver = getParticipant(s.to);
                 return (
-                  <div key={idx} className="bg-white border-2 border-slate-50 rounded-[2.5rem] p-6 sm:p-8 hover:border-indigo-100 hover:shadow-lg transition-all space-y-8">
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-6 text-center sm:text-left">
-                       <div className="flex flex-col items-center sm:items-start gap-3">
-                          <img src={payer?.avatar} className="w-16 h-16 rounded-3xl shadow-md border-2 border-white" />
-                          <div className="min-w-0">
-                            <p className="text-[9px] font-black text-red-500 uppercase tracking-widest bg-red-50 px-2 py-0.5 rounded-lg inline-block mb-1">OWES</p>
-                            <p className="text-xl font-black text-slate-900 truncate">{payer?.name}</p>
+                  <div key={idx} className="bg-white border-2 border-slate-50 rounded-[2.5rem] p-6 hover:border-indigo-100 hover:shadow-lg transition-all space-y-6">
+                    {/* Compact Horizontal Settlement Display */}
+                    <div className="flex items-center justify-between gap-2">
+                       <div className="flex flex-col items-center gap-1 shrink-0 w-[85px]">
+                          <img src={payer?.avatar} className="w-12 h-12 rounded-2xl shadow-sm border border-slate-100" />
+                          <p className="text-[10px] font-black text-slate-900 truncate w-full text-center">{payer?.name}</p>
+                          <span className="text-[7px] font-black text-red-500 uppercase tracking-widest bg-red-50 px-1.5 py-0.5 rounded-full">OWES</span>
+                       </div>
+
+                       <div className="flex flex-col items-center flex-1 min-w-0">
+                          <p className="text-2xl font-black text-slate-900 tracking-tighter">₹{s.amount.toFixed(0)}</p>
+                          <div className="flex items-center gap-1 text-slate-100 w-full px-2">
+                             <div className="h-[2px] flex-1 bg-slate-100 rounded-full"></div>
+                             <i className="fa-solid fa-chevron-right text-[8px] text-slate-200"></i>
+                             <div className="h-[2px] flex-1 bg-slate-100 rounded-full"></div>
                           </div>
                        </div>
 
-                       <div className="flex flex-col items-center">
-                          <p className="text-4xl font-black text-slate-900 tracking-tighter">₹{s.amount.toFixed(0)}</p>
-                          <div className="flex items-center gap-2 text-slate-200 mt-2">
-                             <div className="h-[2px] w-8 bg-slate-100 rounded-full"></div>
-                             <i className="fa-solid fa-chevron-right text-[10px] text-slate-300"></i>
-                             <div className="h-[2px] w-8 bg-slate-100 rounded-full"></div>
-                          </div>
-                       </div>
-
-                       <div className="flex flex-col items-center sm:items-end gap-3">
-                          <img src={receiver?.avatar} className="w-16 h-16 rounded-3xl shadow-md border-2 border-white" />
-                          <div className="min-w-0 sm:text-right">
-                            <p className="text-[9px] font-black text-green-500 uppercase tracking-widest bg-green-50 px-2 py-0.5 rounded-lg inline-block mb-1">GETS</p>
-                            <p className="text-xl font-black text-slate-900 truncate">{receiver?.name}</p>
-                          </div>
+                       <div className="flex flex-col items-center gap-1 shrink-0 w-[85px]">
+                          <img src={receiver?.avatar} className="w-12 h-12 rounded-2xl shadow-sm border border-slate-100" />
+                          <p className="text-[10px] font-black text-slate-900 truncate w-full text-center">{receiver?.name}</p>
+                          <span className="text-[7px] font-black text-green-500 uppercase tracking-widest bg-green-50 px-1.5 py-0.5 rounded-full">GETS</span>
                        </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 pt-4">
-                      <button onClick={() => {setPaymentModal({settlement: s, show: true}); setShowUpiInput(false);}} className="bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all">PAY NOW</button>
-                      <button onClick={() => handleWhatsAppReminder(s)} className="bg-green-50 text-green-600 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-green-100 transition-all border border-green-100 active:scale-95">REMIND</button>
-                      <button onClick={() => onSettle(s.from, s.to, s.amount)} className="col-span-2 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors border border-dashed border-slate-200 rounded-2xl">Mark Settle Manually</button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={() => {setPaymentModal({settlement: s, show: true}); setShowUpiInput(false);}} className="bg-indigo-600 text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-md hover:bg-indigo-700 active:scale-95 transition-all">PAY NOW</button>
+                      <button onClick={() => handleWhatsAppReminder(s)} className="bg-green-50 text-green-600 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-green-100 transition-all border border-green-100 active:scale-95">REMIND</button>
+                      <button onClick={() => onSettle(s.from, s.to, s.amount)} className="col-span-2 py-2 text-[8px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-colors border border-dashed border-slate-100 rounded-xl">Manual Settle</button>
                     </div>
                   </div>
                 );
