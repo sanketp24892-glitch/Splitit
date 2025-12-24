@@ -1,20 +1,18 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>splitIt - Group Expense Splitter</title>
+    <title>splitIt - good times in, awkward math out</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script>
-      // Critical polyfill for browser environments to prevent crashes
-      // when libraries or code reference process.env
+      // Critical polyfill for browser environments
       window.process = { 
         env: { 
           NODE_ENV: 'production',
-          API_KEY: '',
-          SUPABASE_URL: 'https://yrlvjtnxusbgqeqgaonu.supabase.co',
-          SUPABASE_ANON_KEY: 'sb_publishable_bFgmsQkkShvZYtyLf7ASEA_I1J6Y3zw'
+          API_KEY: ''
         } 
       };
     </script>
@@ -23,10 +21,9 @@
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
         }
-        /* Improve mobile scrolling and touch targets */
         @media (max-width: 640px) {
           input, select, button {
-            font-size: 16px !important; /* Prevents iOS zoom */
+            font-size: 16px !important;
           }
         }
         .scrollbar-hide::-webkit-scrollbar {
@@ -45,13 +42,12 @@
     "react": "https://esm.sh/react@^19.2.3",
     "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
     "recharts": "https://esm.sh/recharts@^3.6.0",
-    "lz-string": "https://esm.sh/lz-string@^1.5.0",
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.45.0"
+    "lz-string": "https://esm.sh/lz-string@^1.5.0"
   }
 }
 </script>
 </head>
-<body class="bg-white text-zinc-950">
+<body class="bg-[#f8fafc] text-slate-900">
     <div id="root"></div>
     <script type="module" src="index.tsx"></script>
 </body>

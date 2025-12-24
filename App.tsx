@@ -1,13 +1,13 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import LZString from 'lz-string';
 import { Participant, Expense, Settlement, Balance, SplitEvent } from './types.ts';
 import ParticipantManager from './components/ParticipantManager.tsx';
 import ExpenseForm from './components/ExpenseForm.tsx';
 import SettlementView from './components/SettlementView.tsx';
 import { calculateBalances, calculateSettlements } from './utils/calculation.ts';
 
-// Helper to generate a 6-character random ID for short URLs and unique event strings
+// Helper to generate a 6-character random ID for unique event strings
 const generateShortId = () => {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -17,12 +17,20 @@ const generateShortId = () => {
   return result;
 };
 
-// Initialize Supabase client safely from window.process.env polyfill
-const getSupabase = () => {
-  const url = (window as any).process?.env?.SUPABASE_URL || 'https://yrlvjtnxusbgqeqgaonu.supabase.co';
-  const key = (window as any).process?.env?.SUPABASE_ANON_KEY || 'sb_publishable_bFgmsQkkShvZYtyLf7ASEA_I1J6Y3zw';
-  if (!url || !key) return null;
-  return createClient(url, key);
+const serializeEvent = (event: SplitEvent): string => {
+  const json = JSON.stringify(event);
+  return LZString.compressToEncodedURIComponent(json);
+};
+
+const deserializeEvent = (data: string): SplitEvent | null => {
+  try {
+    const decompressed = LZString.decompressFromEncodedURIComponent(data);
+    if (!decompressed) return null;
+    return JSON.parse(decompressed);
+  } catch (e) {
+    console.error("Failed to deserialize event data", e);
+    return null;
+  }
 };
 
 const App: React.FC = () => {
@@ -33,46 +41,31 @@ const App: React.FC = () => {
   // App states
   const [activeTab, setActiveTab] = useState<'overview' | 'settlement'>('overview');
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
-  const [shareStatus, setShareStatus] = useState<'idle' | 'saving' | 'copied' | 'error'>('idle');
+  const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle');
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareEventId, setShareEventId] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isLoadingShared, setIsLoadingShared] = useState(false);
 
   const getAvatar = (name: string) => `https://api.dicebear.com/7.x/initials/svg?seed=${name}&backgroundColor=4f46e5&textColor=ffffff`;
 
-  // Fetch Logic: Check for short trip ID in hash on initial load
+  // Hydration Logic: Check for shared trip data in URL query params
   useEffect(() => {
-    const loadInitialData = async () => {
+    const loadInitialData = () => {
       const savedEvents = localStorage.getItem('splitit_multi_events');
       let currentEvents: Record<string, SplitEvent> = savedEvents ? JSON.parse(savedEvents) : {};
 
-      const hash = window.location.hash;
-      const shortIdMatch = hash.match(/#\/?trip\/([a-z0-9]{6})$/i);
-      const sb = getSupabase();
+      const urlParams = new URLSearchParams(window.location.search);
+      const tripData = urlParams.get('trip');
       
-      if (shortIdMatch && shortIdMatch[1] && sb) {
-        const tripSlug = shortIdMatch[1];
-        setIsLoadingShared(true);
-        try {
-          const { data, error } = await sb
-            .from('trips')
-            .select('trip_data')
-            .eq('id', tripSlug)
-            .single();
-
-          if (!error && data?.trip_data) {
-            const fetchedEvent = data.trip_data as SplitEvent;
-            const localId = fetchedEvent.id || tripSlug;
-            currentEvents[localId] = fetchedEvent;
-            setCurrentEventId(localId);
-            // Clear hash after loading to avoid re-triggering and keeping a clean URL
-            window.history.replaceState(null, "", window.location.pathname);
-          }
-        } catch (err) {
-          console.error("Supabase fetch error:", err);
-        } finally {
-          setIsLoadingShared(false);
+      if (tripData) {
+        const sharedEvent = deserializeEvent(tripData);
+        if (sharedEvent) {
+          // Add shared event to local events list
+          currentEvents[sharedEvent.id] = sharedEvent;
+          setCurrentEventId(sharedEvent.id);
+          // Clean up URL to keep it pretty after hydration
+          const newUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState(null, "", newUrl);
         }
       }
       
@@ -173,47 +166,11 @@ const App: React.FC = () => {
     });
   };
 
-  const handleShareToSupabase = async () => {
-    if (!shareEventId || !events[shareEventId]) return;
-    
-    setShareStatus('saving');
-    const sb = getSupabase();
-    if (!sb) {
-      setShareStatus('error');
-      return;
-    }
-
-    const targetEvent = events[shareEventId];
-    const shortId = targetEvent.id;
-    
-    try {
-      const { error } = await sb
-        .from('trips')
-        .upsert([{ 
-          id: shortId,
-          trip_data: targetEvent,
-          name: targetEvent.name 
-        }]);
-
-      if (error) throw error;
-      setShareStatus('idle');
-    } catch (err) {
-      console.error("Supabase Sync Error:", err);
-      setShareStatus('error');
-    }
-  };
-
-  const openShareModal = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    setShareEventId(id);
-    setShareStatus('idle');
-    setShowShareModal(true);
-  };
-
-  const currentUniqueUrl = useMemo(() => {
-    if (!shareEventId) return '';
-    return `${window.location.origin}/#/trip/${shareEventId}`;
-  }, [shareEventId]);
+  const currentShareUrl = useMemo(() => {
+    if (!shareEventId || !events[shareEventId]) return '';
+    const serialized = serializeEvent(events[shareEventId]);
+    return `${window.location.origin}${window.location.pathname}?trip=${serialized}`;
+  }, [shareEventId, events]);
 
   const getWhatsAppText = () => {
     if (!activeEvent) return '';
@@ -225,7 +182,7 @@ const App: React.FC = () => {
           return `💸 *${fromName}* owes *${toName}*: ₹${s.amount.toFixed(2)}`;
         }).join('\n');
     
-    return `💰 *SplitIt: ${activeEvent.name}*\n\n*Current Settlements:*\n${settlementText}\n\n🔗 Open trip and settle:\n${currentUniqueUrl}\n\nNo more awkward money talks! SplitIt handles it all for you.`;
+    return `💰 *SplitIt: ${activeEvent.name}*\n\n*Current Settlements:*\n${settlementText}\n\n🔗 Open trip and settle:\n${currentShareUrl}\n\nNo more awkward math!`;
   };
 
   const handleShareWhatsApp = () => {
@@ -237,31 +194,19 @@ const App: React.FC = () => {
     window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(getWhatsAppText())}`, '_blank');
   };
 
-  const handleShareArattai = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: `SplitIt: ${activeEvent?.name}`,
-        text: getWhatsAppText(),
-        url: currentUniqueUrl
-      }).catch(console.error);
-    } else {
-      alert("Sharing via Arattai is best supported on mobile. Please copy the link instead.");
-    }
-  };
-
   const handleCopyLink = () => {
-    if (!currentUniqueUrl) return;
-    navigator.clipboard.writeText(currentUniqueUrl).then(() => {
+    if (!currentShareUrl) return;
+    navigator.clipboard.writeText(currentShareUrl).then(() => {
       setShareStatus('copied');
       setTimeout(() => setShareStatus('idle'), 2000);
     });
   };
 
-  if (!isInitialized || isLoadingShared) {
+  if (!isInitialized) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center font-sans">
         <div className="w-12 h-12 border-4 border-slate-100 border-t-[#4f46e5] rounded-full animate-spin mb-4"></div>
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Fetching Trip...</p>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Loading SplitIt...</p>
       </div>
     );
   }
@@ -303,7 +248,10 @@ const App: React.FC = () => {
                 <div key={ev.id} onClick={()=>setCurrentEventId(ev.id)} className="bg-white p-6 rounded-[2rem] border border-slate-100 hover:shadow-xl transition-all cursor-pointer group">
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black">{ev.name.charAt(0)}</div>
-                    <button onClick={(e)=>{e.stopPropagation(); deleteEvent(ev.id)}} className="text-slate-200 hover:text-red-500 transition-colors p-2"><i className="fa-solid fa-trash-can"></i></button>
+                    <div className="flex gap-2">
+                       <button onClick={(e)=>{e.stopPropagation(); setShareEventId(ev.id); setShowShareModal(true);}} className="text-slate-300 hover:text-indigo-600 transition-colors p-2"><i className="fa-solid fa-share-nodes"></i></button>
+                       <button onClick={(e)=>{e.stopPropagation(); deleteEvent(ev.id)}} className="text-slate-200 hover:text-red-500 transition-colors p-2"><i className="fa-solid fa-trash-can"></i></button>
+                    </div>
                   </div>
                   <h4 className="text-xl font-black text-slate-800 line-clamp-1">{ev.name}</h4>
                   <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 tracking-widest">{ev.participants.length} Members • ₹{ev.expenses.reduce((acc,curr)=>curr.category!=='Payment'?acc+curr.amount:acc,0).toFixed(0)}</p>
@@ -341,17 +289,15 @@ const App: React.FC = () => {
             <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Spent</span><p className="text-3xl font-black">₹{totalSpent.toFixed(0)}</p></div>
             <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Squad</span><p className="text-3xl font-black">{activeEvent.participants.length}</p></div>
           </div>
-          <button onClick={(e)=>openShareModal(e, activeEvent.id)} className="bg-[#4f46e5] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#4338ca] shadow-lg active:scale-95 transition-all">Share with Squad</button>
+          <button onClick={(e)=>{e.stopPropagation(); setShareEventId(activeEvent.id); setShowShareModal(true);}} className="bg-[#4f46e5] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#4338ca] shadow-lg active:scale-95 transition-all">Share with Squad</button>
         </div>
 
         {activeTab === 'overview' ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* MOBILE-FIRST: Squad is order-1 (top) */}
             <div className="lg:col-span-3 order-1 lg:order-1">
               <ParticipantManager participants={activeEvent.participants} onAdd={addParticipant} onRemove={removeParticipant} />
             </div>
             
-            {/* MOBILE-FIRST: History is order-3 (bottom) */}
             <div className="lg:col-span-5 space-y-6 order-3 lg:order-2">
               <div className="bg-white border border-slate-100 rounded-[2rem] p-4 min-h-[400px] shadow-sm overflow-hidden">
                 <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 p-4 border-b border-slate-50 mb-4 flex items-center gap-2">
@@ -377,7 +323,6 @@ const App: React.FC = () => {
               </div>
             </div>
             
-            {/* MOBILE-FIRST: Transaction form is order-2 (middle) */}
             <div className="lg:col-span-4 order-2 lg:order-3">
               <ExpenseForm participants={activeEvent.participants} onAdd={addExpense} />
             </div>
@@ -392,14 +337,16 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl overflow-hidden animate-in zoom-in-95">
             <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <h3 className="text-xl font-black text-slate-800">Share with Squad</h3>
+              <h3 className="text-xl font-black text-slate-800">Share Trip</h3>
               <button onClick={()=>setShowShareModal(false)} className="text-slate-400 hover:text-slate-800"><i className="fa-solid fa-xmark"></i></button>
             </div>
             <div className="p-8 space-y-6">
               <div className="space-y-4">
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center relative group">
-                  <p className="text-xs font-bold text-indigo-600 truncate pr-8">{currentUniqueUrl}</p>
-                  <button onClick={handleCopyLink} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"><i className={`fa-solid ${shareStatus==='copied'?'fa-check text-green-500':'fa-copy'}`}></i></button>
+                  <p className="text-[10px] font-bold text-indigo-600 truncate pr-8">{currentShareUrl}</p>
+                  <button onClick={handleCopyLink} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600">
+                    <i className={`fa-solid ${shareStatus==='copied'?'fa-check text-green-500':'fa-copy'}`}></i>
+                  </button>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-3">
@@ -411,26 +358,20 @@ const App: React.FC = () => {
                     <div className="w-12 h-12 bg-red-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-red-100"><i className="fa-solid fa-envelope"></i></div>
                     <span className="text-[10px] font-black uppercase text-red-700">Gmail</span>
                   </button>
-                  <button onClick={handleShareArattai} className="flex flex-col items-center gap-2 p-5 bg-blue-50 rounded-3xl hover:bg-blue-100 transition-all">
-                    <div className="w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-blue-100"><i className="fa-solid fa-share-nodes"></i></div>
-                    <span className="text-[10px] font-black uppercase text-blue-700">Arattai</span>
-                  </button>
-                  <button onClick={handleCopyLink} className={`flex flex-col items-center gap-2 p-5 rounded-3xl transition-all ${shareStatus==='copied'?'bg-green-100':'bg-slate-50 hover:bg-slate-100'}`}>
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg ${shareStatus==='copied'?'bg-green-600':'bg-slate-800'}`}><i className={`fa-solid ${shareStatus==='copied'?'fa-check':'fa-link'}`}></i></div>
-                    <span className="text-[10px] font-black uppercase text-slate-700">{shareStatus==='copied'?'Copied':'Copy Link'}</span>
+                  <button onClick={handleCopyLink} className={`flex flex-col items-center gap-2 p-5 rounded-3xl transition-all col-span-2 ${shareStatus==='copied'?'bg-green-100':'bg-indigo-600 text-white'}`}>
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg ${shareStatus==='copied'?'bg-green-600':'bg-indigo-800'}`}>
+                      <i className={`fa-solid ${shareStatus==='copied'?'fa-check':'fa-link'}`}></i>
+                    </div>
+                    <span className={`text-[10px] font-black uppercase mt-1 ${shareStatus==='copied'?'text-green-700':'text-indigo-50'}`}>
+                      {shareStatus==='copied'?'Copied to Clipboard':'Copy Shareable Link'}
+                    </span>
                   </button>
                 </div>
 
-                <div className="pt-4 border-t border-slate-50">
-                   <button 
-                    onClick={handleShareToSupabase} 
-                    disabled={shareStatus === 'saving'}
-                    className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-indigo-100 transition-all disabled:opacity-50"
-                  >
-                    {shareStatus === 'saving' ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-cloud-arrow-up"></i>}
-                    {shareStatus === 'saving' ? 'Syncing...' : 'Sync to Cloud'}
-                  </button>
-                  {shareStatus === 'error' && <p className="text-[9px] text-red-500 font-bold text-center mt-2">Could not sync. Local link works fine!</p>}
+                <div className="pt-4 text-center">
+                  <p className="text-[9px] text-slate-400 font-bold leading-relaxed">
+                    This link contains all the trip data. <br/> Anyone with this link can view and add expenses.
+                  </p>
                 </div>
               </div>
             </div>
