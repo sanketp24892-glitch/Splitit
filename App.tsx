@@ -344,7 +344,11 @@ const App: React.FC = () => {
 
         {activeTab === 'overview' ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-3 order-2 lg:order-1"><ParticipantManager participants={activeEvent.participants} onAdd={addParticipant} onRemove={removeParticipant} /></div>
+            {/* "The Squad" moved to order-1 for mobile, lg:order-1 for desktop */}
+            <div className="lg:col-span-3 order-1 lg:order-1">
+              <ParticipantManager participants={activeEvent.participants} onAdd={addParticipant} onRemove={removeParticipant} />
+            </div>
+            {/* Expense History order-3 for mobile, lg:order-2 for desktop */}
             <div className="lg:col-span-5 space-y-6 order-3 lg:order-2">
               <div className="bg-white border border-slate-100 rounded-[2rem] p-4 min-h-[400px] shadow-sm overflow-hidden">
                 <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 p-4 border-b border-slate-50 mb-4 flex items-center gap-2"><i className="fa-solid fa-clock-rotate-left"></i>History</h2>
@@ -359,7 +363,10 @@ const App: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="lg:col-span-4 order-1 lg:order-3"><ExpenseForm participants={activeEvent.participants} onAdd={addExpense} /></div>
+            {/* Expense Form order-2 for mobile, lg:order-3 for desktop */}
+            <div className="lg:col-span-4 order-2 lg:order-3">
+              <ExpenseForm participants={activeEvent.participants} onAdd={addExpense} />
+            </div>
           </div>
         ) : (
           <SettlementView participants={activeEvent.participants} balances={balances} settlements={settlements} totalSpent={totalSpent} onSettle={handleSettle} />
