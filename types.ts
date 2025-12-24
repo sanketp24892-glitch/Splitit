@@ -25,3 +25,11 @@ export interface Balance {
   participantId: string;
   amount: number;
 }
+
+export interface SplitEvent {
+  id: string;
+  name: string;
+  participants: Participant[];
+  expenses: Expense[];
+  createdAt: number;
+}

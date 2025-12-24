@@ -1,6 +1,7 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import LZString from 'lz-string';
-import { Participant, Expense, Settlement, Balance } from './types.ts';
+import { Participant, Expense, Settlement, Balance, SplitEvent } from './types.ts';
 import ParticipantManager from './components/ParticipantManager.tsx';
 import ExpenseForm from './components/ExpenseForm.tsx';
 import SettlementView from './components/SettlementView.tsx';
@@ -20,538 +21,433 @@ import {
 } from 'recharts';
 
 const App: React.FC = () => {
-  const [eventName, setEventName] = useState<string>('');
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [events, setEvents] = useState<Record<string, SplitEvent>>({});
+  const [currentEventId, setCurrentEventId] = useState<string | null>(null);
+  const [newEventName, setNewEventName] = useState('');
+  
+  // App states scoped to the active event
   const [activeTab, setActiveTab] = useState<'expenses' | 'settlement'>('expenses');
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
-  const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle');
+  const [shareStatus, setShareStatus] = useState<'idle' | 'loading' | 'copied'>('idle');
   const [showShareModal, setShowShareModal] = useState(false);
+  const [shareEventId, setShareEventId] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Helper to recreate avatar URL
+  const CATEGORY_MAP: Record<string, Expense['category']> = {
+    'F': 'Food', 'T': 'Transport', 'L': 'Lodging', 'E': 'Entertainment', 'P': 'Payment', 'O': 'Other'
+  };
+
   const getAvatar = (name: string) => `https://api.dicebear.com/7.x/initials/svg?seed=${name}&backgroundColor=4f46e5&textColor=ffffff`;
 
-  // URL Sharing & Persistence
+  // Persistence & Shared Link Loading
   useEffect(() => {
     const loadInitialData = () => {
+      const savedEvents = localStorage.getItem('splitit_multi_events');
+      let currentEvents: Record<string, SplitEvent> = savedEvents ? JSON.parse(savedEvents) : {};
+
+      // Handle shared hash
       const hash = window.location.hash.substring(1);
       if (hash) {
         try {
-          // Decompress the data from the hash
           const decompressed = LZString.decompressFromEncodedURIComponent(hash);
           if (decompressed) {
             const parsed = JSON.parse(decompressed);
             if (Array.isArray(parsed.p) && Array.isArray(parsed.e)) {
-              // Reconstruct the full state from minimized keys
-              const reconstructedParticipants = parsed.p.map((p: any) => ({
-                id: p.i,
-                name: p.n,
-                avatar: getAvatar(p.n)
-              }));
-              
-              const reconstructedExpenses = parsed.e.map((e: any) => ({
-                id: e.i,
-                description: e.d,
-                amount: e.a,
-                payerId: e.p,
-                participantIds: e.s,
-                date: e.t,
-                category: e.c
-              }));
-
-              setParticipants(reconstructedParticipants);
-              setExpenses(reconstructedExpenses);
-              setEventName(parsed.n || '');
-              setIsInitialized(true);
-              return;
+              const sharedId = `shared-${Date.now()}`;
+              const reconstructed: SplitEvent = {
+                id: sharedId,
+                name: parsed.n || 'Shared Event',
+                participants: parsed.p.map((name: string, idx: number) => ({
+                  id: `p-${idx}`,
+                  name: name,
+                  avatar: getAvatar(name)
+                })),
+                expenses: parsed.e.map((e: any, idx: number) => ({
+                  id: `e-${idx}`,
+                  description: e.d,
+                  amount: e.a,
+                  payerId: `p-${e.p}`,
+                  participantIds: e.s.map((sIdx: number) => `p-${sIdx}`),
+                  date: e.t * 1000,
+                  category: CATEGORY_MAP[e.c] || 'Other'
+                })),
+                createdAt: Date.now()
+              };
+              currentEvents[sharedId] = reconstructed;
+              setCurrentEventId(sharedId);
+              // Clean URL
+              window.history.replaceState(null, "", window.location.pathname);
             }
           }
         } catch (e) {
           console.error("Failed to parse shared link data", e);
         }
       }
-
-      // Fallback to localStorage if no hash or hash failed
-      const savedParticipants = localStorage.getItem('splitit_participants');
-      const savedExpenses = localStorage.getItem('splitit_expenses');
-      const savedEventName = localStorage.getItem('splitit_eventname');
       
-      if (savedParticipants) setParticipants(JSON.parse(savedParticipants));
-      if (savedExpenses) setExpenses(JSON.parse(savedExpenses));
-      if (savedEventName) setEventName(savedEventName);
-      
+      setEvents(currentEvents);
       setIsInitialized(true);
     };
 
     loadInitialData();
   }, []);
 
-  // Save to localStorage ONLY after initialization to avoid overwriting with defaults
   useEffect(() => {
     if (isInitialized) {
-      localStorage.setItem('splitit_participants', JSON.stringify(participants));
-      localStorage.setItem('splitit_expenses', JSON.stringify(expenses));
-      localStorage.setItem('splitit_eventname', eventName);
+      localStorage.setItem('splitit_multi_events', JSON.stringify(events));
     }
-  }, [participants, expenses, eventName, isInitialized]);
+  }, [events, isInitialized]);
 
-  const handleNewEvent = () => {
-    if (window.confirm("Are you sure you want to start a new event? This will clear all current data.")) {
-      setEventName('');
-      setParticipants([]);
-      setExpenses([]);
-      localStorage.clear();
-      window.history.replaceState(null, "", window.location.pathname);
+  // Active event helper
+  const activeEvent = currentEventId ? events[currentEventId] : null;
+
+  // Derived data for active event
+  const { balances, settlements, totalSpent, categoryData, memberSpendingData } = useMemo(() => {
+    if (!activeEvent) return { balances: [], settlements: [], totalSpent: 0, categoryData: [], memberSpendingData: [] };
+    
+    const bals = calculateBalances(activeEvent.participants, activeEvent.expenses);
+    const setts = calculateSettlements([...bals]);
+    const total = activeEvent.expenses.reduce((acc, curr) => curr.category !== 'Payment' ? acc + curr.amount : acc, 0);
+
+    const counts: Record<string, number> = {};
+    activeEvent.expenses.filter(e => e.category !== 'Payment').forEach(e => {
+      counts[e.category] = (counts[e.category] || 0) + e.amount;
+    });
+    const catData = Object.entries(counts).map(([name, value]) => ({ name, value }));
+
+    const spending: Record<string, number> = {};
+    activeEvent.participants.forEach(p => spending[p.name] = 0);
+    activeEvent.expenses.filter(e => e.category !== 'Payment').forEach(e => {
+      const p = activeEvent.participants.find(part => part.id === e.payerId);
+      if (p) spending[p.name] += e.amount;
+    });
+    const memData = Object.entries(spending).map(([name, value]) => ({ name, value }));
+
+    return { 
+      balances: bals, 
+      settlements: setts, 
+      totalSpent: total, 
+      categoryData: catData, 
+      memberSpendingData: memData 
+    };
+  }, [activeEvent]);
+
+  // Actions
+  const createEvent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEventName.trim()) return;
+    const id = crypto.randomUUID();
+    const newEv: SplitEvent = {
+      id,
+      name: newEventName.trim(),
+      participants: [],
+      expenses: [],
+      createdAt: Date.now()
+    };
+    setEvents(prev => ({ ...prev, [id]: newEv }));
+    setNewEventName('');
+    setCurrentEventId(id);
+  };
+
+  const deleteEvent = (id: string) => {
+    if (window.confirm("Delete this event forever?")) {
+      const newEvents = { ...events };
+      delete newEvents[id];
+      setEvents(newEvents);
+      if (currentEventId === id) setCurrentEventId(null);
     }
   };
 
-  const { balances, settlements, totalSpent } = useMemo(() => {
-    const bals = calculateBalances(participants, expenses);
-    return {
-      balances: bals,
-      settlements: calculateSettlements([...bals]),
-      totalSpent: expenses.reduce((acc, curr) => curr.category !== 'Payment' ? acc + curr.amount : acc, 0)
-    };
-  }, [participants, expenses]);
+  const updateActiveEvent = (updates: Partial<SplitEvent>) => {
+    if (!currentEventId) return;
+    setEvents(prev => ({
+      ...prev,
+      [currentEventId]: { ...prev[currentEventId], ...updates }
+    }));
+  };
 
-  const getShareUrl = () => {
-    // Minimize payload to keep link short
-    const minimizedData = {
-      n: eventName,
-      p: participants.map(p => ({ i: p.id, n: p.name })), // Only id and name
-      e: expenses.map(e => ({ 
-        i: e.id, d: e.description, a: e.amount, p: e.payerId, s: e.participantIds, t: e.date, c: e.category 
+  const addParticipant = (name: string) => {
+    if (!activeEvent) return;
+    updateActiveEvent({
+      participants: [...activeEvent.participants, { id: crypto.randomUUID(), name, avatar: getAvatar(name) }]
+    });
+  };
+
+  const removeParticipant = (id: string) => {
+    if (!activeEvent) return;
+    updateActiveEvent({
+      participants: activeEvent.participants.filter(p => p.id !== id),
+      expenses: activeEvent.expenses.filter(e => e.payerId !== id && !e.participantIds.includes(id))
+    });
+  };
+
+  const addExpense = (newExp: Omit<Expense, 'id'>) => {
+    if (!activeEvent) return;
+    updateActiveEvent({
+      expenses: [{ ...newExp, id: crypto.randomUUID() }, ...activeEvent.expenses]
+    });
+  };
+
+  const removeExpense = (id: string) => {
+    if (!activeEvent) return;
+    updateActiveEvent({
+      expenses: activeEvent.expenses.filter(e => e.id !== id)
+    });
+    if (selectedExpense?.id === id) setSelectedExpense(null);
+  };
+
+  const handleSettle = (fromId: string, toId: string, amount: number) => {
+    if (!activeEvent) return;
+    const fromP = activeEvent.participants.find(p => p.id === fromId)?.name;
+    const toP = activeEvent.participants.find(p => p.id === toId)?.name;
+    addExpense({
+      description: `Settlement: ${fromP} paid ${toP}`,
+      amount: amount, payerId: fromId, participantIds: [toId], category: 'Payment', date: Date.now()
+    });
+  };
+
+  // Sharing Helpers
+  const getFullShareUrl = (eventId: string) => {
+    const targetEvent = events[eventId];
+    const pMap = new Map();
+    targetEvent.participants.forEach((p, idx) => pMap.set(p.id, idx));
+
+    const payload = {
+      n: targetEvent.name,
+      p: targetEvent.participants.map(p => p.name),
+      e: targetEvent.expenses.map(e => ({
+        d: e.description,
+        a: e.amount,
+        p: pMap.get(e.payerId),
+        s: e.participantIds.map(id => pMap.get(id)),
+        t: Math.floor(e.date / 1000),
+        c: e.category[0]
       }))
     };
     
-    const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(minimizedData));
+    const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(payload));
     return `${window.location.origin}${window.location.pathname}#${compressed}`;
   };
 
-  const getSettlementText = (isFormatted: boolean = true) => {
-    if (settlements.length === 0) return "All settled up! No pending dues. ✅";
-    return settlements.map(s => {
-      const fromP = participants.find(p => p.id === s.from)?.name || 'Someone';
-      const toP = participants.find(p => p.id === s.to)?.name || 'Someone';
-      const b = isFormatted ? "*" : "";
-      return `💸 ${b}${fromP}${b} owes ${b}${toP}${b}: ₹${s.amount.toFixed(2)}`;
-    }).join('\n');
+  const getShortUrl = async (eventId: string) => {
+    const longUrl = getFullShareUrl(eventId);
+    try {
+      setShareStatus('loading');
+      const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
+      if (res.ok) {
+        const short = await res.text();
+        setShareStatus('idle');
+        return short;
+      }
+    } catch (e) {
+      console.warn("Shortening failed", e);
+    }
+    setShareStatus('idle');
+    return longUrl;
   };
 
-  const handleShareWhatsApp = () => {
-    const url = getShareUrl();
-    const text = `💰 *SplitIt: ${eventName || 'Trip Expenses'}*\n\n*Settlement Details:*\n${getSettlementText(true)}\n\n🔗 View full list & settle here:\n${url}`;
+  const openShareModal = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setShareEventId(id);
+    setShowShareModal(true);
+  };
+
+  const handleShareWhatsApp = async () => {
+    if (!shareEventId) return;
+    const url = await getShortUrl(shareEventId);
+    const ev = events[shareEventId];
+    const bals = calculateBalances(ev.participants, ev.expenses);
+    const setts = calculateSettlements([...bals]);
+    const settlementText = setts.length === 0 ? "All settled! ✅" : setts.map(s => `💸 *${ev.participants.find(p=>p.id===s.from)?.name}* owes *${ev.participants.find(p=>p.id===s.to)?.name}*: ₹${s.amount.toFixed(2)}`).join('\n');
+    const text = `💰 *SplitIt: ${ev.name}*\n\n*Settlements:*\n${settlementText}\n\n🔗 View & Settle:\n${url}`;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  const handleShareGmail = () => {
-    const url = getShareUrl();
-    const subject = `SplitIt Expenses: ${eventName || 'Group Trip'}`;
-    const body = `Hi squad,\n\nHere are the settlement details for ${eventName || 'our trip'}:\n\n${getSettlementText(false)}\n\nView breakdown here:\n${url}`;
-    window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
-  };
-
-  const handleShareSMS = () => {
-    const url = getShareUrl();
-    const text = `SplitIt: ${eventName || 'Expenses'}\n${getSettlementText(false)}\nLink: ${url}`;
-    window.open(`sms:?body=${encodeURIComponent(text)}`, '_blank');
-  };
-
-  const handleCopyLink = () => {
-    const url = getShareUrl();
+  const handleCopyLink = async () => {
+    if (!shareEventId) return;
+    const url = await getShortUrl(shareEventId);
     navigator.clipboard.writeText(url).then(() => {
       setShareStatus('copied');
       setTimeout(() => setShareStatus('idle'), 2000);
     });
   };
 
-  const addParticipant = (name: string) => {
-    const newP: Participant = {
-      id: crypto.randomUUID(),
-      name,
-      avatar: getAvatar(name)
-    };
-    setParticipants([...participants, newP]);
-  };
-
-  const removeParticipant = (id: string) => {
-    setParticipants(participants.filter(p => p.id !== id));
-    setExpenses(expenses.filter(e => e.payerId !== id && !e.participantIds.includes(id)));
-  };
-
-  const addExpense = (newExp: Omit<Expense, 'id'>) => {
-    const exp: Expense = { ...newExp, id: crypto.randomUUID() };
-    setExpenses([exp, ...expenses]);
-  };
-
-  const removeExpense = (id: string) => {
-    setExpenses(expenses.filter(e => e.id !== id));
-    if (selectedExpense?.id === id) setSelectedExpense(null);
-  };
-
-  const handleSettle = (fromId: string, toId: string, amount: number) => {
-    const fromP = participants.find(p => p.id === fromId);
-    const toP = participants.find(p => p.id === toId);
-    
-    addExpense({
-      description: `Settlement: ${fromP?.name || 'Debtor'} paid ${toP?.name || 'Creditor'}`,
-      amount: amount,
-      payerId: fromId,
-      participantIds: [toId],
-      category: 'Payment',
-      date: Date.now()
-    });
-  };
-
-  const categoryData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    expenses.filter(e => e.category !== 'Payment').forEach(e => {
-      counts[e.category] = (counts[e.category] || 0) + e.amount;
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [expenses]);
-
-  const memberSpendingData = useMemo(() => {
-    const spending: Record<string, number> = {};
-    participants.forEach(p => spending[p.name] = 0);
-    expenses.filter(e => e.category !== 'Payment').forEach(e => {
-      const p = participants.find(part => part.id === e.payerId);
-      if (p) spending[p.name] += e.amount;
-    });
-    return Object.entries(spending).map(([name, value]) => ({ name, value }));
-  }, [expenses, participants]);
-
   const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
+  // Dashboard Render
+  if (!currentEventId) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans">
+        <header className="bg-white border-b border-slate-100 p-6 sm:p-8 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 bg-[#4f46e5] rounded-xl flex items-center justify-center text-white text-2xl"><i className="fa-solid fa-receipt"></i></div>
+             <h1 className="text-2xl font-black text-slate-800 tracking-tight">SplitIt</h1>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-slate-100 px-4 py-1.5 rounded-full">Dashboard</span>
+        </header>
+
+        <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-8 sm:py-16 space-y-12">
+          {/* Create Event Section */}
+          <section className="bg-white rounded-[2.5rem] p-8 sm:p-12 shadow-xl shadow-indigo-50/50 border border-slate-100 text-center space-y-8">
+            <div className="space-y-2">
+              <h2 className="text-3xl font-bold text-slate-800">New Group Session</h2>
+              <p className="text-slate-400 font-medium">Split bills instantly for trips, parties, or dinners.</p>
+            </div>
+            
+            <form onSubmit={createEvent} className="max-w-md mx-auto relative group">
+              <input 
+                type="text" 
+                value={newEventName}
+                onChange={e => setNewEventName(e.target.value)}
+                placeholder="Enter event name... e.g. Goa 2024"
+                className="w-full px-8 py-5 rounded-3xl bg-slate-50 border-2 border-transparent focus:border-[#4f46e5] focus:bg-white text-lg font-bold transition-all outline-none pr-36 shadow-inner"
+              />
+              <button 
+                type="submit"
+                className="absolute right-2 top-2 bottom-2 bg-[#4f46e5] text-white px-8 rounded-2xl font-black text-sm hover:bg-[#4338ca] transition-all shadow-lg active:scale-95"
+              >
+                START
+              </button>
+            </form>
+          </section>
+
+          {/* Existing Events Grid */}
+          {Object.values(events).length > 0 && (
+            <section className="space-y-6">
+              <div className="flex items-center justify-between px-2">
+                <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">Your Active Events</h3>
+                <span className="text-xs font-bold text-[#4f46e5]">{Object.values(events).length} Saved</span>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Explicitly cast Object.values(events) and type parameters to fix 'unknown' type errors */}
+                {(Object.values(events) as SplitEvent[]).sort((a: SplitEvent, b: SplitEvent) => b.createdAt - a.createdAt).map((ev: SplitEvent) => {
+                  const evTotal = ev.expenses.reduce((acc, curr) => curr.category !== 'Payment' ? acc + curr.amount : acc, 0);
+                  return (
+                    <div 
+                      key={ev.id}
+                      onClick={() => setCurrentEventId(ev.id)}
+                      className="group bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-xl hover:border-[#4f46e5]/20 hover:-translate-y-1 transition-all cursor-pointer flex flex-col justify-between min-h-[220px]"
+                    >
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div className="w-10 h-10 bg-[#eef2ff] text-[#4f46e5] rounded-xl flex items-center justify-center text-lg font-black group-hover:bg-[#4f46e5] group-hover:text-white transition-colors">
+                            {ev.name.charAt(0)}
+                          </div>
+                          <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={(e) => openShareModal(e, ev.id)} className="w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:text-[#4f46e5] flex items-center justify-center transition-colors"><i className="fa-solid fa-share-nodes text-xs"></i></button>
+                            <button onClick={(e) => { e.stopPropagation(); deleteEvent(ev.id); }} className="w-8 h-8 rounded-full bg-slate-50 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors"><i className="fa-solid fa-trash text-xs"></i></button>
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="text-xl font-bold text-slate-800 line-clamp-1">{ev.name}</h4>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{new Date(ev.createdAt).toLocaleDateString()} • {ev.participants.length} People</p>
+                        </div>
+                      </div>
+                      
+                      <div className="pt-4 border-t border-slate-50 flex items-end justify-between">
+                         <div>
+                            <span className="block text-[8px] font-black text-slate-300 uppercase tracking-widest">Spent</span>
+                            <span className="text-xl font-black text-slate-800">₹{evTotal.toFixed(0)}</span>
+                         </div>
+                         <i className="fa-solid fa-chevron-right text-slate-200 group-hover:translate-x-1 group-hover:text-[#4f46e5] transition-all"></i>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </main>
+      </div>
+    );
+  }
+
+  // Active Event View
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans overflow-x-hidden">
-      {/* Header */}
       <header className="bg-white border-b border-slate-100 sticky top-0 z-30 shadow-sm px-4">
         <div className="max-w-7xl mx-auto h-20 flex items-center justify-between gap-2">
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-[#4f46e5] rounded-md flex items-center justify-center text-white text-lg shrink-0">
-                <i className="fa-solid fa-receipt"></i>
-              </div>
-              <h1 className="text-xl sm:text-2xl font-bold text-[#1e293b] tracking-tight truncate">
-                SplitIt
-              </h1>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setCurrentEventId(null)}
+              className="w-10 h-10 rounded-full hover:bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-800 transition-all"
+            >
+              <i className="fa-solid fa-arrow-left"></i>
+            </button>
+            <div className="flex flex-col min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-[#1e293b] truncate">{activeEvent.name}</h1>
+              <p className="text-[9px] font-bold text-slate-400 tracking-[0.1em] uppercase">SplitIt Management</p>
             </div>
-            <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 tracking-[0.05em] sm:tracking-[0.1em] mt-0.5 leading-tight">
-              good times in,<br /> awkward math out.
-            </p>
           </div>
-          
           <nav className="flex bg-[#f1f5f9] p-1 rounded-xl shrink-0">
-            <button
-              onClick={() => setActiveTab('expenses')}
-              className={`px-2.5 sm:px-6 py-2 rounded-lg text-[10px] sm:text-sm font-semibold transition-all ${
-                activeTab === 'expenses' ? 'bg-white text-[#4f46e5] shadow-sm' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Overview
-            </button>
-            <button
-              onClick={() => setActiveTab('settlement')}
-              className={`px-2.5 sm:px-6 py-2 rounded-lg text-[10px] sm:text-sm font-semibold transition-all ${
-                activeTab === 'settlement' ? 'bg-white text-[#4f46e5] shadow-sm' : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Settlement
-            </button>
+            <button onClick={() => setActiveTab('expenses')} className={`px-4 sm:px-6 py-2 rounded-lg text-xs font-semibold transition-all ${activeTab === 'expenses' ? 'bg-white text-[#4f46e5] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Overview</button>
+            <button onClick={() => setActiveTab('settlement')} className={`px-4 sm:px-6 py-2 rounded-lg text-xs font-semibold transition-all ${activeTab === 'settlement' ? 'bg-white text-[#4f46e5] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Settlement</button>
           </nav>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
-        
-        {/* Event Header & Controls */}
-        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center bg-white p-4 sm:p-6 rounded-3xl border border-slate-100 shadow-sm">
-          <div className="flex-1 flex flex-col gap-1">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">Event Name</label>
-            <input 
-              type="text" 
-              value={eventName}
-              onChange={(e) => setEventName(e.target.value)}
-              placeholder="e.g. Goa Trip 2024, Birthday Party"
-              className="text-lg sm:text-xl font-bold text-[#1e293b] bg-transparent border-none focus:ring-0 placeholder:text-slate-300 w-full"
-            />
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        {/* Quick Summary Row */}
+        <div className="flex items-center justify-between bg-white px-6 py-4 rounded-3xl border border-slate-100 shadow-sm">
+          <div className="flex gap-8">
+            <div><span className="text-[8px] font-bold text-slate-400 uppercase block mb-1">Total Spent</span><p className="text-lg font-black">₹{totalSpent.toFixed(0)}</p></div>
+            <div><span className="text-[8px] font-bold text-slate-400 uppercase block mb-1">Squad</span><p className="text-lg font-black">{activeEvent.participants.length}</p></div>
           </div>
-          <div className="flex flex-row gap-2 sm:gap-4 shrink-0">
-            <button
-              onClick={handleNewEvent}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-2xl text-xs sm:text-sm font-bold transition-all border border-slate-200 text-slate-600 hover:bg-slate-50"
-            >
-              <i className="fa-solid fa-plus"></i>
-              New Event
-            </button>
-            <button
-              onClick={() => setShowShareModal(true)}
-              className="flex-[2] sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-2xl text-xs sm:text-sm font-bold transition-all bg-[#4f46e5] border-[#4f46e5] text-white hover:bg-[#4338ca] shadow-md shadow-indigo-100"
-            >
-              <i className="fa-solid fa-share-nodes"></i>
-              Share with Squad
-            </button>
-          </div>
+          <button 
+            onClick={(e) => openShareModal(e, activeEvent.id)}
+            className="flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-bold transition-all bg-[#4f46e5] text-white hover:bg-[#4338ca] shadow-md shadow-indigo-100"
+          >
+            <i className="fa-solid fa-share-nodes"></i>
+            Share Dues
+          </button>
         </div>
 
         {activeTab === 'expenses' ? (
-          <div className="space-y-8">
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
-              {/* The Squad */}
-              <div className="lg:col-span-3">
-                <ParticipantManager participants={participants} onAdd={addParticipant} onRemove={removeParticipant} />
-              </div>
-
-              {/* Recent Activity */}
-              <div className="lg:col-span-5 flex flex-col gap-6">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2 text-[#1e293b]">
-                    <i className="fa-solid fa-list-ul text-[#4f46e5]"></i>
-                    <h2 className="text-lg sm:text-xl font-bold">Recent Activity</h2>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full uppercase tracking-wider">
-                    {expenses.length} Records
-                  </span>
-                </div>
-                
-                <div className="min-h-[300px] sm:min-h-[400px] bg-white border-2 border-dashed border-slate-200 rounded-3xl p-4 sm:p-6 flex flex-col items-center justify-center text-center overflow-y-auto max-h-[500px] sm:max-h-[600px] scrollbar-hide">
-                  {expenses.length === 0 ? (
-                    <>
-                      <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-4">
-                        <i className="fa-solid fa-receipt text-2xl"></i>
-                      </div>
-                      <h3 className="text-lg font-bold text-[#1e293b]">Clean slate!</h3>
-                      <p className="text-sm text-slate-400 max-w-[200px] mt-2">
-                        Add an expense or scan a receipt to start splitting.
-                      </p>
-                    </>
-                  ) : (
-                    <div className="w-full space-y-3 text-left self-start">
-                      {expenses.sort((a, b) => b.date - a.date).map(e => (
-                        <div 
-                          key={e.id} 
-                          onClick={() => setSelectedExpense(e)}
-                          className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                            e.category === 'Payment' 
-                            ? 'bg-slate-50 border-slate-100 italic opacity-80' 
-                            : 'bg-white border-slate-100 hover:border-[#4f46e5] hover:shadow-sm'
-                          }`}
-                        >
-                          <div className="flex justify-between items-center gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="font-bold text-[#1e293b] truncate text-sm sm:text-base">{e.description}</p>
-                              <p className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold mt-1 truncate">
-                                {participants.find(p => p.id === e.payerId)?.name} • {new Date(e.date).toLocaleDateString()}
-                              </p>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className={`font-bold text-sm sm:text-base ${e.category === 'Payment' ? 'text-slate-400' : 'text-[#1e293b]'}`}>₹{e.amount.toFixed(2)}</p>
-                              <p className="text-[8px] sm:text-[9px] font-bold text-slate-300 uppercase">{e.category}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div className="lg:col-span-3"><ParticipantManager participants={activeEvent.participants} onAdd={addParticipant} onRemove={removeParticipant} /></div>
+            <div className="lg:col-span-5 space-y-4">
+              <div className="flex justify-between items-center"><h2 className="text-lg font-bold flex items-center gap-2"><i className="fa-solid fa-list-ul text-[#4f46e5]"></i>Recent Activity</h2><span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">{activeEvent.expenses.length} Records</span></div>
+              <div className="min-h-[400px] bg-white border border-slate-100 rounded-3xl p-4 overflow-y-auto max-h-[600px] scrollbar-hide">
+                {activeEvent.expenses.length === 0 ? <div className="h-full flex flex-col items-center justify-center text-center text-slate-300"><i className="fa-solid fa-receipt text-3xl mb-2"></i><p className="text-sm font-bold">No expenses yet</p></div> : 
+                  activeEvent.expenses.sort((a,b) => b.date - a.date).map(e => (
+                    <div key={e.id} onClick={() => setSelectedExpense(e)} className={`p-4 mb-3 rounded-xl border transition-all cursor-pointer ${e.category === 'Payment' ? 'bg-slate-50 border-slate-100 italic' : 'bg-white border-slate-50 hover:border-[#4f46e5]'}`}>
+                      <div className="flex justify-between items-center"><div className="min-w-0"><p className="font-bold text-slate-800 truncate">{e.description}</p><p className="text-[9px] text-slate-400 font-bold uppercase">{activeEvent.participants.find(p=>p.id===e.payerId)?.name} • {new Date(e.date).toLocaleDateString()}</p></div><div className="text-right shrink-0"><p className="font-bold text-slate-800">₹{e.amount.toFixed(2)}</p><p className="text-[8px] text-slate-300 font-bold uppercase">{e.category}</p></div></div>
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Transaction Form */}
-              <div className="lg:col-span-4">
-                <ExpenseForm participants={participants} onAdd={addExpense} />
+                  ))}
               </div>
             </div>
-
-            {/* Analytics Section */}
-            {expenses.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 pt-8 border-t border-slate-200">
-                {/* Category Chart */}
-                <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100">
-                  <div className="flex items-center gap-2 mb-6 text-[#1e293b]">
-                    <i className="fa-solid fa-chart-pie text-[#4f46e5]"></i>
-                    <h2 className="text-base sm:text-lg font-bold">Spending by Category</h2>
-                  </div>
-                  <div className="h-[250px] sm:h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={categoryData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={50}
-                          outerRadius={70}
-                          paddingAngle={5}
-                          dataKey="value"
-                        >
-                          {categoryData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip 
-                           contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
-                           formatter={(value: number) => `₹${value.toFixed(2)}`}
-                        />
-                        <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Member Chart */}
-                <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100">
-                  <div className="flex items-center gap-2 mb-6 text-[#1e293b]">
-                    <i className="fa-solid fa-chart-column text-[#4f46e5]"></i>
-                    <h2 className="text-base sm:text-lg font-bold">Spending by Member</h2>
-                  </div>
-                  <div className="h-[250px] sm:h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={memberSpendingData} margin={{ top: 20, right: 10, left: 0, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis 
-                          dataKey="name" 
-                          axisLine={false} 
-                          tickLine={false} 
-                          tick={{ fontSize: 9, fontWeight: 700, fill: '#64748b' }} 
-                        />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: '#64748b' }} />
-                        <Tooltip 
-                           cursor={{ fill: '#f8fafc' }}
-                           contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
-                           formatter={(value: number) => `₹${value.toFixed(2)}`}
-                        />
-                        <Bar dataKey="value" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={30} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-            )}
+            <div className="lg:col-span-4"><ExpenseForm participants={activeEvent.participants} onAdd={addExpense} /></div>
           </div>
         ) : (
-          <SettlementView
-            participants={participants}
-            balances={balances}
-            settlements={settlements}
-            totalSpent={totalSpent}
-            onSettle={handleSettle}
-          />
+          <SettlementView participants={activeEvent.participants} balances={balances} settlements={settlements} totalSpent={totalSpent} onSettle={handleSettle} />
         )}
       </main>
 
-      {/* Detail Modal */}
-      {selectedExpense && (
+      {/* Shared Modals */}
+      {showShareModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-[#1e293b]">Expense Detail</h3>
-              <button onClick={() => setSelectedExpense(null)} className="text-slate-400 hover:text-slate-600 p-2">
-                <i className="fa-solid fa-xmark text-lg"></i>
-              </button>
+          <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-center"><h3 className="text-xl font-bold text-slate-800">Share "{events[shareEventId!]?.name}"</h3><button onClick={() => setShowShareModal(false)} className="text-slate-400 hover:text-slate-600"><i className="fa-solid fa-xmark text-lg"></i></button></div>
+            <div className="p-8 grid grid-cols-2 gap-4 relative">
+              {shareStatus === 'loading' && <div className="absolute inset-0 bg-white/80 z-10 flex flex-col items-center justify-center gap-2"><i className="fa-solid fa-spinner animate-spin text-[#4f46e5] text-2xl"></i><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Processing...</span></div>}
+              <button onClick={handleShareWhatsApp} className="flex flex-col items-center gap-2 p-6 rounded-3xl bg-green-50 hover:bg-green-100 transition-colors"><div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white"><i className="fa-brands fa-whatsapp text-2xl"></i></div><span className="text-xs font-bold text-green-700">WhatsApp</span></button>
+              <button onClick={handleCopyLink} className={`flex flex-col items-center gap-2 p-6 rounded-3xl transition-colors ${shareStatus === 'copied' ? 'bg-indigo-100' : 'bg-slate-50'}`}><div className={`w-12 h-12 rounded-full flex items-center justify-center text-white ${shareStatus === 'copied' ? 'bg-indigo-600' : 'bg-slate-700'}`}><i className={`fa-solid ${shareStatus === 'copied' ? 'fa-check' : 'fa-link'} text-xl`}></i></div><span className="text-xs font-bold text-slate-700">{shareStatus === 'copied' ? 'Copied!' : 'Copy Link'}</span></button>
             </div>
-            <div className="p-6 space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 text-sm">Description</span>
-                <span className="font-bold text-[#1e293b]">{selectedExpense.description}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 text-sm">Amount</span>
-                <span className="font-bold text-xl text-[#4f46e5]">₹{selectedExpense.amount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 text-sm">Category</span>
-                <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold uppercase text-slate-500">{selectedExpense.category}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-400 text-sm">Who Paid</span>
-                <span className="font-bold text-[#1e293b]">{participants.find(p => p.id === selectedExpense.payerId)?.name}</span>
-              </div>
-              <div className="space-y-2">
-                <span className="text-slate-400 text-sm">Split Among</span>
-                <div className="flex flex-wrap gap-2">
-                  {selectedExpense.participantIds.map(id => (
-                    <span key={id} className="text-xs font-semibold bg-[#eef2ff] text-[#4f46e5] px-2 py-1 rounded-md">
-                      {participants.find(p => p.id === id)?.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="pt-6 border-t border-slate-50 flex flex-col gap-2">
-                <button 
-                  onClick={() => removeExpense(selectedExpense.id)}
-                  className="w-full py-4 text-sm font-bold text-red-500 bg-red-50 rounded-2xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2"
-                >
-                  <i className="fa-solid fa-trash-can"></i>
-                  Delete Expense
-                </button>
-              </div>
-            </div>
+            <div className="p-6 bg-slate-50 rounded-b-[2.5rem] text-center"><p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Data remains synced offline</p></div>
           </div>
         </div>
       )}
 
-      {/* Share Modal */}
-      {showShareModal && (
+      {selectedExpense && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-[#1e293b]">Share with Squad</h3>
-              <button onClick={() => setShowShareModal(false)} className="text-slate-400 hover:text-slate-600 p-2">
-                <i className="fa-solid fa-xmark text-lg"></i>
-              </button>
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl p-8 space-y-6 animate-in zoom-in-95">
+            <div className="flex justify-between items-center"><h3 className="text-xl font-bold">Expense Detail</h3><button onClick={() => setSelectedExpense(null)} className="text-slate-400 hover:text-slate-800"><i className="fa-solid fa-xmark"></i></button></div>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center pb-4 border-b border-slate-50"><span>Description</span><span className="font-bold text-lg">{selectedExpense.description}</span></div>
+              <div className="flex justify-between items-center pb-4 border-b border-slate-50"><span>Amount</span><span className="font-black text-2xl text-[#4f46e5]">₹{selectedExpense.amount}</span></div>
+              <div className="flex justify-between items-center pb-4 border-b border-slate-50"><span>Who Paid</span><span className="font-bold">{activeEvent.participants.find(p=>p.id===selectedExpense.payerId)?.name}</span></div>
             </div>
-            <div className="p-6 grid grid-cols-2 gap-4">
-              <button 
-                onClick={handleShareWhatsApp}
-                className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-green-50 hover:bg-green-100 transition-colors group"
-              >
-                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform">
-                  <i className="fa-brands fa-whatsapp text-2xl"></i>
-                </div>
-                <span className="text-xs font-bold text-green-700">WhatsApp</span>
-              </button>
-
-              <button 
-                onClick={handleShareGmail}
-                className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-red-50 hover:bg-red-100 transition-colors group"
-              >
-                <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform">
-                  <i className="fa-solid fa-envelope text-xl"></i>
-                </div>
-                <span className="text-xs font-bold text-red-700">Gmail</span>
-              </button>
-
-              <button 
-                onClick={handleShareSMS}
-                className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-blue-50 hover:bg-blue-100 transition-colors group"
-              >
-                <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform">
-                  <i className="fa-solid fa-message text-xl"></i>
-                </div>
-                <span className="text-xs font-bold text-blue-700">Message</span>
-              </button>
-
-              <button 
-                onClick={handleCopyLink}
-                className={`flex flex-col items-center gap-2 p-4 rounded-2xl transition-colors group ${
-                  shareStatus === 'copied' ? 'bg-indigo-100' : 'bg-slate-50 hover:bg-slate-100'
-                }`}
-              >
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white shadow-sm group-hover:scale-110 transition-transform ${
-                  shareStatus === 'copied' ? 'bg-indigo-600' : 'bg-slate-700'
-                }`}>
-                  <i className={`fa-solid ${shareStatus === 'copied' ? 'fa-check' : 'fa-link'} text-xl`}></i>
-                </div>
-                <span className={`text-xs font-bold ${shareStatus === 'copied' ? 'text-indigo-700' : 'text-slate-700'}`}>
-                  {shareStatus === 'copied' ? 'Copied!' : 'Copy Link'}
-                </span>
-              </button>
-            </div>
-            <div className="p-4 bg-slate-50 text-center">
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Everything synced & ready</p>
-            </div>
+            <button onClick={() => removeExpense(selectedExpense.id)} className="w-full py-4 bg-red-50 text-red-500 font-bold rounded-2xl hover:bg-red-100 transition-colors flex items-center justify-center gap-2"><i className="fa-solid fa-trash-can"></i>Delete Transaction</button>
           </div>
         </div>
       )}

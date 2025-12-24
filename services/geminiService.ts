@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 
 export interface ParsedReceipt {
@@ -8,26 +9,22 @@ export interface ParsedReceipt {
 
 export const parseReceipt = async (base64Image: string): Promise<ParsedReceipt | null> => {
   try {
-    // Initialize inside the function to avoid top-level crashes and ensure 
-    // the most current API_KEY is used.
-    const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : '';
-    const ai = new GoogleGenAI({ apiKey: apiKey || '' });
+    // Initialize GoogleGenAI using the process.env.API_KEY directly.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: [
-        {
-          parts: [
-            { text: "Extract the following details from this receipt image: description (brief, e.g., 'Lunch at Mario's'), total amount (numeric), and the most suitable category from: Food, Transport, Lodging, Entertainment, Other." },
-            {
-              inlineData: {
-                mimeType: "image/jpeg",
-                data: base64Image.split(',')[1] // remove data:image/jpeg;base64,
-              }
+      contents: {
+        parts: [
+          { text: "Extract the following details from this receipt image: description (brief, e.g., 'Lunch at Mario's'), total amount (numeric), and the most suitable category from: Food, Transport, Lodging, Entertainment, Other." },
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: base64Image.split(',')[1] // remove data:image/jpeg;base64,
             }
-          ]
-        }
-      ],
+          }
+        ]
+      },
       config: {
         responseMimeType: "application/json",
         responseSchema: {
