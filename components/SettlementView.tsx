@@ -22,7 +22,9 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
     const payer = getParticipant(s.from);
     const payee = getParticipant(s.to);
     if (!payer || !payee) return;
-    const msg = `Hey ${payer.name}, split our bills on SplitIt! 💸 You owe me *₹${s.amount.toFixed(0)}*.\n${payee.upiId ? `\nMy UPI: ${payee.upiId}` : ''}\n\nThanks! 👋`;
+    
+    const msg = `Hey *${payer.name}*, split our bills on SplitIt! 💸 You owe *${payee.name}* *₹${s.amount.toFixed(0)}*.\n${payee.upiId ? `\nMy UPI: ${payee.upiId}` : ''}\n\nLess maths. More memories.\nTry Splitit → www.splitits.in`;
+    
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
@@ -149,6 +151,15 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
             <span className="text-2xl font-black text-indigo-400 tracking-tighter">₹{settlements.reduce((acc, curr) => acc + curr.amount, 0).toFixed(0)}</span>
           </div>
         </div>
+      </div>
+
+      <div className="mt-8 text-center space-y-1">
+        <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight">
+          Less maths. More memories.
+        </p>
+        <p className="text-[10px] font-black text-[#4f46e5] uppercase tracking-widest">
+          Try Splitit → <span className="underline">www.splitits.in</span>
+        </p>
       </div>
 
       {paymentModal && (

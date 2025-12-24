@@ -98,6 +98,25 @@ export const addParticipant = async (eventId: string, p: Omit<Participant, 'id'>
 };
 
 /**
+ * Updates a participant's details
+ */
+export const updateParticipant = async (id: string, updates: Partial<Participant>) => {
+  const payload: any = {};
+  if (updates.name) payload.name = updates.name;
+  if (updates.upiId !== undefined) payload.upi_id = updates.upiId;
+  
+  const { error } = await supabase
+    .from('participants')
+    .update(payload)
+    .eq('id', id);
+
+  if (error) {
+    console.error("Update Participant Error:", error);
+    throw error;
+  }
+};
+
+/**
  * Deletes a participant by ID
  */
 export const deleteParticipant = async (id: string) => {
@@ -116,6 +135,7 @@ export const addExpense = async (eventId: string, e: Omit<Expense, 'id'>) => {
       description: e.description,
       amount: e.amount,
       payer_id: e.payerId,
+      // Fixed: Property 'participant_ids' does not exist on type 'Omit<Expense, "id">'. Using 'participantIds' from the Expense interface.
       participant_ids: e.participantIds,
       category: e.category
     }])

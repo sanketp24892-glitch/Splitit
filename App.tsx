@@ -218,7 +218,7 @@ const App: React.FC = () => {
 
         <footer className="w-full p-8 text-center space-y-2">
           <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight">
-            good times in, awkward math out.
+            trips end. memories stay. debts don’t.
           </p>
           <p className="text-[10px] font-black text-[#4f46e5] uppercase tracking-widest">
             Try splitit now: <span className="underline cursor-pointer">splitits.in</span>
@@ -267,8 +267,8 @@ const App: React.FC = () => {
             </div>
           </div>
           <nav className="flex bg-slate-100 p-1 rounded-xl shrink-0">
-            <button onClick={()=>navigate(`/event/${routeMatch.code}`)} className={`px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase transition-all ${routeMatch.tab==='overview'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>OVERVIEW</button>
-            <button onClick={()=>navigate(`/event/${routeMatch.code}/settlement`)} className={`px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase transition-all ${routeMatch.tab==='settlement'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>SETTLEMENT</button>
+            <button onClick={()=>navigate(`/event/${routeMatch.code}`)} className={`px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase transition-all ${routeMatch.tab === 'overview' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>OVERVIEW</button>
+            <button onClick={()=>navigate(`/event/${routeMatch.code}/settlement`)} className={`px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase transition-all ${routeMatch.tab === 'settlement' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>SETTLEMENT</button>
           </nav>
         </div>
       </header>
@@ -333,6 +333,16 @@ const App: React.FC = () => {
                     participants={activeEvent.participants} 
                     expenses={activeEvent.expenses} 
                   />
+                </div>
+                
+                {/* Footer added to bottom of Overview tab content */}
+                <div className="pt-8 text-center space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight">
+                    Less maths. More memories.
+                  </p>
+                  <p className="text-[10px] font-black text-[#4f46e5] uppercase tracking-widest">
+                    Try Splitit → <span className="underline">www.splitits.in</span>
+                  </p>
                 </div>
               </div>
             </div>
