@@ -57,11 +57,17 @@ const App: React.FC = () => {
               const reconstructed: SplitEvent = {
                 id: sharedId,
                 name: parsed.n || 'Shared Event',
-                participants: parsed.p.map((name: string, idx: number) => ({
-                  id: `p-${idx}`,
-                  name: name,
-                  avatar: getAvatar(name)
-                })),
+                participants: parsed.p.map((p: any, idx: number) => {
+                  // Handle legacy string array or new object array
+                  const name = typeof p === 'string' ? p : p.n;
+                  const upi = typeof p === 'string' ? undefined : p.u;
+                  return {
+                    id: `p-${idx}`,
+                    name,
+                    upiId: upi,
+                    avatar: getAvatar(name)
+                  };
+                }),
                 expenses: parsed.e.map((e: any, idx: number) => ({
                   id: `e-${idx}`,
                   description: e.d,
@@ -165,10 +171,10 @@ const App: React.FC = () => {
     }));
   };
 
-  const addParticipant = (name: string) => {
+  const addParticipant = (name: string, upiId?: string) => {
     if (!activeEvent) return;
     updateActiveEvent({
-      participants: [...activeEvent.participants, { id: crypto.randomUUID(), name, avatar: getAvatar(name) }]
+      participants: [...activeEvent.participants, { id: crypto.randomUUID(), name, avatar: getAvatar(name), upiId }]
     });
   };
 
@@ -213,7 +219,7 @@ const App: React.FC = () => {
 
     const payload = {
       n: targetEvent.name,
-      p: targetEvent.participants.map(p => p.name),
+      p: targetEvent.participants.map(p => ({ n: p.name, u: p.upiId })),
       e: targetEvent.expenses.map(e => ({
         d: e.description,
         a: e.amount,
@@ -319,7 +325,6 @@ const App: React.FC = () => {
               </div>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Explicitly cast Object.values(events) and type parameters to fix 'unknown' type errors */}
                 {(Object.values(events) as SplitEvent[]).sort((a: SplitEvent, b: SplitEvent) => b.createdAt - a.createdAt).map((ev: SplitEvent) => {
                   const evTotal = ev.expenses.reduce((acc, curr) => curr.category !== 'Payment' ? acc + curr.amount : acc, 0);
                   return (

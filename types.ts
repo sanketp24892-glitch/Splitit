@@ -3,6 +3,7 @@ export interface Participant {
   id: string;
   name: string;
   avatar: string;
+  upiId?: string;
 }
 
 export interface Expense {
