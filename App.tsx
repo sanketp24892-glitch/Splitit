@@ -146,14 +146,14 @@ const App: React.FC = () => {
 
   const handleShare = (type: 'whatsapp' | 'sms' | 'copy') => {
     const url = window.location.origin + `/event/${routeMatch.code}`;
-    const text = `Join my event "${activeEvent?.name}" on SplitIt: ${url}`;
+    const text = `Join my event *${activeEvent?.name}* on Splitit: ${url}\n\nLess maths. More memories.\nTry Splitit → www.splitits.in`;
     
     if (type === 'whatsapp') {
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
     } else if (type === 'sms') {
       window.open(`sms:?body=${encodeURIComponent(text)}`, '_blank');
     } else {
-      navigator.clipboard.writeText(url);
+      navigator.clipboard.writeText(text);
       setShareStatus('copied');
       setTimeout(() => setShareStatus('idle'), 2000);
     }
@@ -216,12 +216,12 @@ const App: React.FC = () => {
           </div>
         </main>
 
-        <footer className="w-full p-8 text-center space-y-2">
+        <footer className="w-full p-8 text-center space-y-1">
           <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight">
-            trips end. memories stay. debts don’t.
+            Less maths. More memories.
           </p>
           <p className="text-[10px] font-black text-[#4f46e5] uppercase tracking-widest">
-            Try splitit now: <span className="underline cursor-pointer">splitits.in</span>
+            Try Splitit → <span className="underline cursor-pointer">www.splitits.in</span>
           </p>
         </footer>
       </div>
@@ -250,6 +250,14 @@ const App: React.FC = () => {
             <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-700 active:scale-95 transition-all">Create Event</button>
             <button type="button" onClick={() => navigate('/')} className="w-full py-2 text-[10px] font-black text-slate-300 uppercase">Cancel</button>
           </form>
+        </div>
+        <div className="mt-8 text-center space-y-1">
+          <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight">
+            Less maths. More memories.
+          </p>
+          <p className="text-[10px] font-black text-[#4f46e5] uppercase tracking-widest">
+            Try Splitit → <span className="underline">www.splitits.in</span>
+          </p>
         </div>
       </div>
     );
