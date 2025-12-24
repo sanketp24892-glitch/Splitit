@@ -7,7 +7,7 @@ import ExpenseForm from './components/ExpenseForm.tsx';
 import SettlementView from './components/SettlementView.tsx';
 import { calculateBalances, calculateSettlements } from './utils/calculation.ts';
 
-// Helper to generate a 6-character random ID for unique event strings
+// Helper to generate a 6-character random ID
 const generateShortId = () => {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -36,47 +36,58 @@ const deserializeEvent = (data: string): SplitEvent | null => {
 const App: React.FC = () => {
   const [events, setEvents] = useState<Record<string, SplitEvent>>({});
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'settlement'>('overview');
   const [newEventName, setNewEventName] = useState('');
   
-  // App states
-  const [activeTab, setActiveTab] = useState<'overview' | 'settlement'>('overview');
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
-  const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle');
+  const [shareStatus, setShareStatus] = useState<'idle' | 'shortening' | 'copied' | 'error'>('idle');
   const [showShareModal, setShowShareModal] = useState(false);
-  const [shareEventId, setShareEventId] = useState<string | null>(null);
+  const [shortUrl, setShortUrl] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  const getAvatar = (name: string) => `https://api.dicebear.com/7.x/initials/svg?seed=${name}&backgroundColor=4f46e5&textColor=ffffff`;
-
-  // Hydration Logic: Check for shared trip data in URL query params
+  // Sync state with URL Hash for Routing
   useEffect(() => {
-    const loadInitialData = () => {
-      const savedEvents = localStorage.getItem('splitit_multi_events');
-      let currentEvents: Record<string, SplitEvent> = savedEvents ? JSON.parse(savedEvents) : {};
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      const params = new URLSearchParams(window.location.search);
+      const tripData = params.get('trip');
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const tripData = urlParams.get('trip');
-      
+      // Hydration from URL param
       if (tripData) {
         const sharedEvent = deserializeEvent(tripData);
         if (sharedEvent) {
-          // Add shared event to local events list
-          currentEvents[sharedEvent.id] = sharedEvent;
-          setCurrentEventId(sharedEvent.id);
-          // Clean up URL to keep it pretty after hydration
-          const newUrl = window.location.origin + window.location.pathname;
-          window.history.replaceState(null, "", newUrl);
+          setEvents(prev => ({ ...prev, [sharedEvent.id]: sharedEvent }));
+          // Redirect to the event route without the huge query param
+          window.location.hash = `#/event/${sharedEvent.id}/overview`;
+          window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+          return;
         }
       }
-      
-      setEvents(currentEvents);
-      setIsInitialized(true);
+
+      if (hash.startsWith('#/event/')) {
+        const parts = hash.split('/');
+        const id = parts[2];
+        const tab = parts[3] === 'settlement' ? 'settlement' : 'overview';
+        setCurrentEventId(id);
+        setActiveTab(tab as any);
+      } else {
+        setCurrentEventId(null);
+      }
     };
 
-    loadInitialData();
-  }, []);
+    if (!isInitialized) {
+      const savedEvents = localStorage.getItem('splitit_multi_events');
+      if (savedEvents) setEvents(JSON.parse(savedEvents));
+      setIsInitialized(true);
+      // Wait a tick for state to settle before initial route handling
+      setTimeout(handleHashChange, 0);
+    }
 
-  // Save local changes to localStorage
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [isInitialized]);
+
+  // Save to LocalStorage
   useEffect(() => {
     if (isInitialized) {
       localStorage.setItem('splitit_multi_events', JSON.stringify(events));
@@ -93,6 +104,10 @@ const App: React.FC = () => {
     return { balances: bals, settlements: setts, totalSpent: total };
   }, [activeEvent]);
 
+  const navigateTo = (path: string) => {
+    window.location.hash = path;
+  };
+
   const createEvent = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEventName.trim()) return;
@@ -106,7 +121,7 @@ const App: React.FC = () => {
     };
     setEvents(prev => ({ ...prev, [id]: newEv }));
     setNewEventName('');
-    setCurrentEventId(id);
+    navigateTo(`#/event/${id}/overview`);
   };
 
   const deleteEvent = (id: string) => {
@@ -114,7 +129,7 @@ const App: React.FC = () => {
       const newEvents = { ...events };
       delete newEvents[id];
       setEvents(newEvents);
-      if (currentEventId === id) setCurrentEventId(null);
+      if (currentEventId === id) navigateTo('#/');
     }
   };
 
@@ -129,7 +144,7 @@ const App: React.FC = () => {
   const addParticipant = (name: string, upiId?: string) => {
     if (!activeEvent) return;
     updateActiveEvent({
-      participants: [...activeEvent.participants, { id: crypto.randomUUID(), name, avatar: getAvatar(name), upiId }]
+      participants: [...activeEvent.participants, { id: crypto.randomUUID(), name, avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${name}&backgroundColor=4f46e5&textColor=ffffff`, upiId }]
     });
   };
 
@@ -166,40 +181,47 @@ const App: React.FC = () => {
     });
   };
 
-  const currentShareUrl = useMemo(() => {
-    if (!shareEventId || !events[shareEventId]) return '';
-    const serialized = serializeEvent(events[shareEventId]);
-    return `${window.location.origin}${window.location.pathname}?trip=${serialized}`;
-  }, [shareEventId, events]);
-
-  const getWhatsAppText = () => {
+  const getLongShareUrl = () => {
     if (!activeEvent) return '';
-    const settlementText = settlements.length === 0 
-      ? "All clear! No pending payments. ✅" 
-      : settlements.map(s => {
-          const fromName = activeEvent.participants.find(p => p.id === s.from)?.name;
-          const toName = activeEvent.participants.find(p => p.id === s.to)?.name;
-          return `💸 *${fromName}* owes *${toName}*: ₹${s.amount.toFixed(2)}`;
-        }).join('\n');
-    
-    return `💰 *SplitIt: ${activeEvent.name}*\n\n*Current Settlements:*\n${settlementText}\n\n🔗 Open trip and settle:\n${currentShareUrl}\n\nNo more awkward math!`;
+    const serialized = serializeEvent(activeEvent);
+    return `${window.location.origin}${window.location.pathname}?trip=${serialized}`;
+  };
+
+  const handleShortenLink = async () => {
+    const longUrl = getLongShareUrl();
+    setShareStatus('shortening');
+    try {
+      // Using TinyURL simple proxy-free API
+      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
+      if (response.ok) {
+        const text = await response.text();
+        setShortUrl(text);
+        navigator.clipboard.writeText(text);
+        setShareStatus('copied');
+      } else {
+        throw new Error("Shortening failed");
+      }
+    } catch (e) {
+      // Fallback to copying long URL if shortening fails (often due to CORS)
+      navigator.clipboard.writeText(longUrl);
+      setShortUrl(longUrl);
+      setShareStatus('copied');
+    }
+    setTimeout(() => setShareStatus('idle'), 2000);
   };
 
   const handleShareWhatsApp = () => {
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(getWhatsAppText())}`, '_blank');
-  };
-
-  const handleShareGmail = () => {
-    const subject = `Expense Split for ${activeEvent?.name}`;
-    window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(getWhatsAppText())}`, '_blank');
-  };
-
-  const handleCopyLink = () => {
-    if (!currentShareUrl) return;
-    navigator.clipboard.writeText(currentShareUrl).then(() => {
-      setShareStatus('copied');
-      setTimeout(() => setShareStatus('idle'), 2000);
-    });
+    const longUrl = getLongShareUrl();
+    const settlementText = settlements.length === 0 
+      ? "All clear! No pending payments. ✅" 
+      : settlements.map(s => {
+          const fromName = activeEvent?.participants.find(p => p.id === s.from)?.name;
+          const toName = activeEvent?.participants.find(p => p.id === s.to)?.name;
+          return `💸 *${fromName}* owes *${toName}*: ₹${s.amount.toFixed(2)}`;
+        }).join('\n');
+    
+    const text = `💰 *SplitIt: ${activeEvent?.name}*\n\n*Settlements:*\n${settlementText}\n\n🔗 View Trip:\n${longUrl}`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   if (!isInitialized) {
@@ -211,7 +233,7 @@ const App: React.FC = () => {
     );
   }
 
-  // Dashboard View
+  // Dashboard View (Home Page)
   if (!currentEventId) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans">
@@ -245,11 +267,10 @@ const App: React.FC = () => {
           {Object.keys(events).length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {(Object.values(events) as SplitEvent[]).sort((a,b)=>b.createdAt-a.createdAt).map(ev => (
-                <div key={ev.id} onClick={()=>setCurrentEventId(ev.id)} className="bg-white p-6 rounded-[2rem] border border-slate-100 hover:shadow-xl transition-all cursor-pointer group">
+                <div key={ev.id} onClick={()=>navigateTo(`#/event/${ev.id}/overview`)} className="bg-white p-6 rounded-[2rem] border border-slate-100 hover:shadow-xl transition-all cursor-pointer group">
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black">{ev.name.charAt(0)}</div>
                     <div className="flex gap-2">
-                       <button onClick={(e)=>{e.stopPropagation(); setShareEventId(ev.id); setShowShareModal(true);}} className="text-slate-300 hover:text-indigo-600 transition-colors p-2"><i className="fa-solid fa-share-nodes"></i></button>
                        <button onClick={(e)=>{e.stopPropagation(); deleteEvent(ev.id)}} className="text-slate-200 hover:text-red-500 transition-colors p-2"><i className="fa-solid fa-trash-can"></i></button>
                     </div>
                   </div>
@@ -260,6 +281,10 @@ const App: React.FC = () => {
             </div>
           )}
         </main>
+        <footer className="p-10 text-center space-y-2 border-t border-slate-100">
+           <p className="text-sm font-bold text-slate-400">good times in, awkward math out.</p>
+           <p className="text-xs font-black text-indigo-600 uppercase tracking-widest">Try splitit now: <span className="underline">splitits.in</span></p>
+        </footer>
       </div>
     );
   }
@@ -270,15 +295,25 @@ const App: React.FC = () => {
       <header className="bg-white border-b border-slate-100 sticky top-0 z-30 shadow-sm px-4">
         <div className="max-w-7xl mx-auto h-20 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4 min-w-0">
-            <button onClick={()=>setCurrentEventId(null)} className="w-10 h-10 rounded-xl hover:bg-slate-50 flex items-center justify-center text-slate-400"><i className="fa-solid fa-arrow-left"></i></button>
+            <button onClick={()=>navigateTo('#/')} className="w-10 h-10 rounded-xl hover:bg-slate-50 flex items-center justify-center text-slate-400"><i className="fa-solid fa-arrow-left"></i></button>
             <div className="min-w-0">
               <h1 className="text-lg font-black text-slate-900 truncate uppercase tracking-tight">{activeEvent.name}</h1>
               <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase -mt-0.5">SplitIt Safe</p>
             </div>
           </div>
           <nav className="flex bg-slate-100 p-1 rounded-xl">
-            <button onClick={()=>setActiveTab('overview')} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${activeTab==='overview'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>Overview</button>
-            <button onClick={()=>setActiveTab('settlement')} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${activeTab==='settlement'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>Settlement</button>
+            <button 
+              onClick={()=>navigateTo(`#/event/${currentEventId}/overview`)} 
+              className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${activeTab==='overview'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}
+            >
+              Overview
+            </button>
+            <button 
+              onClick={()=>navigateTo(`#/event/${currentEventId}/settlement`)} 
+              className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${activeTab==='settlement'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}
+            >
+              Settlement
+            </button>
           </nav>
         </div>
       </header>
@@ -289,7 +324,12 @@ const App: React.FC = () => {
             <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Spent</span><p className="text-3xl font-black">₹{totalSpent.toFixed(0)}</p></div>
             <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Squad</span><p className="text-3xl font-black">{activeEvent.participants.length}</p></div>
           </div>
-          <button onClick={(e)=>{e.stopPropagation(); setShareEventId(activeEvent.id); setShowShareModal(true);}} className="bg-[#4f46e5] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#4338ca] shadow-lg active:scale-95 transition-all">Share with Squad</button>
+          <button 
+            onClick={() => setShowShareModal(true)} 
+            className="bg-[#4f46e5] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#4338ca] shadow-lg active:scale-95 transition-all"
+          >
+            Share Trip
+          </button>
         </div>
 
         {activeTab === 'overview' ? (
@@ -297,7 +337,6 @@ const App: React.FC = () => {
             <div className="lg:col-span-3 order-1 lg:order-1">
               <ParticipantManager participants={activeEvent.participants} onAdd={addParticipant} onRemove={removeParticipant} />
             </div>
-            
             <div className="lg:col-span-5 space-y-6 order-3 lg:order-2">
               <div className="bg-white border border-slate-100 rounded-[2rem] p-4 min-h-[400px] shadow-sm overflow-hidden">
                 <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 p-4 border-b border-slate-50 mb-4 flex items-center gap-2">
@@ -322,7 +361,6 @@ const App: React.FC = () => {
                 </div>
               </div>
             </div>
-            
             <div className="lg:col-span-4 order-2 lg:order-3">
               <ExpenseForm participants={activeEvent.participants} onAdd={addExpense} />
             </div>
@@ -331,6 +369,11 @@ const App: React.FC = () => {
           <SettlementView participants={activeEvent.participants} balances={balances} settlements={settlements} totalSpent={totalSpent} onSettle={handleSettle} />
         )}
       </main>
+
+      <footer className="p-10 text-center space-y-2">
+         <p className="text-sm font-bold text-slate-400">good times in, awkward math out.</p>
+         <p className="text-xs font-black text-indigo-600 uppercase tracking-widest">Try splitit now: <span className="underline">splitits.in</span></p>
+      </footer>
 
       {/* Sharing Modal */}
       {showShareModal && (
@@ -342,37 +385,23 @@ const App: React.FC = () => {
             </div>
             <div className="p-8 space-y-6">
               <div className="space-y-4">
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center relative group">
-                  <p className="text-[10px] font-bold text-indigo-600 truncate pr-8">{currentShareUrl}</p>
-                  <button onClick={handleCopyLink} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600">
-                    <i className={`fa-solid ${shareStatus==='copied'?'fa-check text-green-500':'fa-copy'}`}></i>
-                  </button>
-                </div>
+                <button 
+                  onClick={handleShortenLink}
+                  disabled={shareStatus === 'shortening'}
+                  className={`w-full flex items-center justify-center gap-3 py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all shadow-xl active:scale-95 ${shareStatus==='copied' ? 'bg-green-500 text-white' : 'bg-[#4f46e5] text-white hover:bg-[#4338ca]'}`}
+                >
+                  {shareStatus === 'shortening' ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className={`fa-solid ${shareStatus==='copied'?'fa-check':'fa-link'}`}></i>}
+                  {shareStatus === 'shortening' ? 'Shortening...' : shareStatus === 'copied' ? 'Link Copied!' : 'Copy Shareable Link'}
+                </button>
                 
-                <div className="grid grid-cols-2 gap-3">
-                  <button onClick={handleShareWhatsApp} className="flex flex-col items-center gap-2 p-5 bg-green-50 rounded-3xl hover:bg-green-100 transition-all">
-                    <div className="w-12 h-12 bg-green-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-green-100"><i className="fa-brands fa-whatsapp"></i></div>
-                    <span className="text-[10px] font-black uppercase text-green-700">WhatsApp</span>
-                  </button>
-                  <button onClick={handleShareGmail} className="flex flex-col items-center gap-2 p-5 bg-red-50 rounded-3xl hover:bg-red-100 transition-all">
-                    <div className="w-12 h-12 bg-red-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-red-100"><i className="fa-solid fa-envelope"></i></div>
-                    <span className="text-[10px] font-black uppercase text-red-700">Gmail</span>
-                  </button>
-                  <button onClick={handleCopyLink} className={`flex flex-col items-center gap-2 p-5 rounded-3xl transition-all col-span-2 ${shareStatus==='copied'?'bg-green-100':'bg-indigo-600 text-white'}`}>
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg ${shareStatus==='copied'?'bg-green-600':'bg-indigo-800'}`}>
-                      <i className={`fa-solid ${shareStatus==='copied'?'fa-check':'fa-link'}`}></i>
-                    </div>
-                    <span className={`text-[10px] font-black uppercase mt-1 ${shareStatus==='copied'?'text-green-700':'text-indigo-50'}`}>
-                      {shareStatus==='copied'?'Copied to Clipboard':'Copy Shareable Link'}
-                    </span>
-                  </button>
-                </div>
-
-                <div className="pt-4 text-center">
-                  <p className="text-[9px] text-slate-400 font-bold leading-relaxed">
-                    This link contains all the trip data. <br/> Anyone with this link can view and add expenses.
-                  </p>
-                </div>
+                <button onClick={handleShareWhatsApp} className="w-full flex items-center justify-center gap-3 py-5 bg-green-500 text-white rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-green-600 shadow-xl transition-all">
+                  <i className="fa-brands fa-whatsapp text-xl"></i>
+                  Share via WhatsApp
+                </button>
+                
+                <p className="text-[9px] text-slate-400 font-bold text-center uppercase tracking-wider px-4">
+                  This link captures the entire trip state. Anyone with it can add expenses.
+                </p>
               </div>
             </div>
           </div>
@@ -387,18 +416,10 @@ const App: React.FC = () => {
               <button onClick={()=>setSelectedExpense(null)} className="text-slate-400 hover:text-slate-800"><i className="fa-solid fa-xmark"></i></button>
             </div>
             <div className="space-y-4 pt-4 border-t border-slate-50">
-              <div className="flex justify-between">
-                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Label</span>
-                <span className="font-bold text-slate-800">{selectedExpense.description}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Amount</span>
-                <span className="font-black text-indigo-600 text-2xl">₹{selectedExpense.amount.toFixed(2)}</span>
-              </div>
+              <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Label</span><span className="font-bold text-slate-800">{selectedExpense.description}</span></div>
+              <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Amount</span><span className="font-black text-indigo-600 text-2xl">₹{selectedExpense.amount.toFixed(2)}</span></div>
             </div>
-            <button onClick={()=>{removeExpense(selectedExpense.id); setSelectedExpense(null);}} className="w-full py-5 bg-red-50 text-red-500 font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-red-100 transition-all border border-red-100">
-              <i className="fa-solid fa-trash-can mr-2"></i>Delete Record
-            </button>
+            <button onClick={()=>{removeExpense(selectedExpense.id); setSelectedExpense(null);}} className="w-full py-5 bg-red-50 text-red-500 font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-red-100 transition-all border border-red-100"><i className="fa-solid fa-trash-can mr-2"></i>Delete Record</button>
           </div>
         </div>
       )}

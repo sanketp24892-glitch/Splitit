@@ -30,25 +30,16 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
     window.open(whatsappUrl, '_blank');
   };
 
-  const getUPILink = (s: Settlement, method: 'gpay' | 'phonepe' | 'cred' | 'generic') => {
+  const getUPILink = (s: Settlement) => {
     const payee = getParticipant(s.to);
     if (!payee || !payee.upiId) return '';
-    
-    const upiString = `upi://pay?pa=${payee.upiId}&pn=${encodeURIComponent(payee.name)}&am=${s.amount.toFixed(2)}&cu=INR`;
-    
-    switch (method) {
-      case 'gpay': return `googlegpay://pay?pa=${payee.upiId}&pn=${encodeURIComponent(payee.name)}&am=${s.amount.toFixed(2)}&cu=INR`;
-      case 'phonepe': return `phonepe://pay?pa=${payee.upiId}&pn=${encodeURIComponent(payee.name)}&am=${s.amount.toFixed(2)}&cu=INR`;
-      default: return upiString;
-    }
+    return `upi://pay?pa=${payee.upiId}&pn=${encodeURIComponent(payee.name)}&am=${s.amount.toFixed(2)}&cu=INR`;
   };
 
-  const handlePayment = (method: 'gpay' | 'phonepe' | 'cred' | 'generic') => {
+  const handlePayment = () => {
     if (!paymentModal) return;
-    const url = getUPILink(paymentModal.settlement, method);
-    if (url) {
-      window.location.href = url;
-    }
+    const url = getUPILink(paymentModal.settlement);
+    if (url) window.location.href = url;
     setPaymentModal(null);
   };
 
@@ -73,46 +64,63 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
               </div>
             ) : (
               settlements.map((s, idx) => {
-                const payee = getParticipant(s.to);
+                const payer = getParticipant(s.from);
+                const receiver = getParticipant(s.to);
                 return (
-                  <div key={idx} className="bg-white p-5 rounded-3xl border border-slate-100 hover:border-indigo-100 transition-all shadow-sm">
-                    <div className="flex items-center justify-between mb-6 gap-2">
-                      <div className="text-left min-w-0 flex-1">
-                        <span className="text-[8px] font-black uppercase text-slate-300 block mb-1">Payer</span>
-                        <p className="font-black text-slate-900 truncate text-sm">{getParticipantName(s.from)}</p>
+                  <div key={idx} className="bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100 hover:border-indigo-100 transition-all shadow-sm group">
+                    <div className="flex flex-col gap-4">
+                      {/* Clear Debt Identification */}
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                           <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0 border-2 border-white shadow-sm">
+                             <img src={payer?.avatar} className="w-full h-full rounded-full" />
+                           </div>
+                           <div className="min-w-0">
+                              <p className="text-xs font-black text-red-500 uppercase tracking-tighter">Owes</p>
+                              <p className="text-base font-black text-slate-800 truncate">{payer?.name}</p>
+                           </div>
+                        </div>
+
+                        <div className="flex flex-col items-center">
+                           <p className="text-2xl font-black text-indigo-600">₹{s.amount.toFixed(0)}</p>
+                           <i className="fa-solid fa-arrow-right-long text-slate-300 -mt-1"></i>
+                        </div>
+
+                        <div className="flex items-center gap-3 text-right min-w-0 flex-row-reverse">
+                           <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0 border-2 border-white shadow-sm">
+                             <img src={receiver?.avatar} className="w-full h-full rounded-full" />
+                           </div>
+                           <div className="min-w-0">
+                              <p className="text-xs font-black text-green-500 uppercase tracking-tighter">Gets</p>
+                              <p className="text-base font-black text-slate-800 truncate">{receiver?.name}</p>
+                           </div>
+                        </div>
                       </div>
-                      <div className="text-center flex flex-col items-center shrink-0 px-2">
-                        <i className="fa-solid fa-arrow-right text-indigo-200 text-xs mb-1"></i>
-                        <p className="text-xl font-black text-indigo-600">₹{s.amount.toFixed(0)}</p>
+
+                      {/* Action Row */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                        <button
+                          onClick={() => setPaymentModal({ settlement: s, show: true })}
+                          className="col-span-2 sm:col-span-1 bg-indigo-600 text-white text-[9px] font-black uppercase py-4 rounded-xl hover:bg-indigo-700 transition-all shadow-md flex items-center justify-center gap-2"
+                        >
+                          <i className="fa-solid fa-bolt"></i>
+                          PAY NOW
+                        </button>
+                        <button
+                          onClick={() => handleWhatsAppRequest(s)}
+                          className="bg-white text-green-600 border border-green-100 text-[9px] font-black uppercase py-4 rounded-xl hover:bg-green-50 transition-all flex items-center justify-center gap-2"
+                        >
+                          <i className="fa-brands fa-whatsapp text-sm"></i>
+                          REQUEST
+                        </button>
+                        <button
+                          onClick={() => onSettle(s.from, s.to, s.amount)}
+                          className="bg-white text-slate-500 border border-slate-200 text-[9px] font-black uppercase py-4 rounded-xl hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+                        >
+                          <i className="fa-solid fa-check"></i>
+                          MARK PAID
+                        </button>
                       </div>
-                      <div className="text-right min-w-0 flex-1">
-                        <span className="text-[8px] font-black uppercase text-slate-300 block mb-1">Receiver</span>
-                        <p className="font-black text-slate-900 truncate text-sm">{getParticipantName(s.to)}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <button
-                        onClick={() => setPaymentModal({ settlement: s, show: true })}
-                        className="bg-indigo-600 text-white text-[9px] font-black uppercase py-3.5 rounded-xl hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100 flex items-center justify-center gap-2"
-                      >
-                        <i className="fa-solid fa-bolt"></i>
-                        MAKE PAYMENT
-                      </button>
-                      <button
-                        onClick={() => handleWhatsAppRequest(s)}
-                        className="bg-green-500 text-white text-[9px] font-black uppercase py-3.5 rounded-xl hover:bg-green-600 transition-all shadow-md shadow-green-100 flex items-center justify-center gap-2"
-                      >
-                        <i className="fa-brands fa-whatsapp"></i>
-                        REQUEST
-                      </button>
-                      <button
-                        onClick={() => onSettle(s.from, s.to, s.amount)}
-                        className="bg-slate-100 text-slate-500 text-[9px] font-black uppercase py-3.5 rounded-xl hover:bg-slate-200 transition-all flex items-center justify-center gap-2"
-                      >
-                        <i className="fa-solid fa-check"></i>
-                        MARK PAID
-                      </button>
                     </div>
                   </div>
                 );
@@ -125,7 +133,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         <div className="bg-white rounded-[2rem] p-6 sm:p-8 shadow-lg shadow-slate-100/50 border border-slate-100">
           <div className="flex items-center gap-3 mb-6 sm:mb-8">
             <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center"><i className="fa-solid fa-chart-pie"></i></div>
-            <h2 className="text-lg font-black uppercase tracking-tight">Chart Overview</h2>
+            <h2 className="text-lg font-black uppercase tracking-tight">Debt Map</h2>
           </div>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -166,27 +174,12 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                <p className="text-[10px] font-bold text-slate-400 uppercase mt-4">Paying to {getParticipantName(paymentModal.settlement.to)}</p>
             </div>
             
-            <div className="p-8 grid grid-cols-2 gap-4">
-              <button onClick={() => handlePayment('gpay')} className="flex flex-col items-center gap-2 p-5 bg-slate-50 rounded-3xl hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
-                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform"><i className="fa-brands fa-google-pay text-3xl text-[#4285F4]"></i></div>
-                <span className="text-[10px] font-black uppercase text-slate-500 mt-1">GPay</span>
+            <div className="p-8 space-y-3">
+              <button onClick={handlePayment} className="w-full flex items-center justify-center gap-3 py-5 bg-indigo-600 text-white rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 shadow-xl transition-all">
+                <i className="fa-solid fa-mobile-screen-button"></i>
+                OPEN UPI APPS
               </button>
-              <button onClick={() => handlePayment('phonepe')} className="flex flex-col items-center gap-2 p-5 bg-slate-50 rounded-3xl hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
-                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform"><i className="fa-solid fa-mobile-screen text-2xl text-[#5f259f]"></i></div>
-                <span className="text-[10px] font-black uppercase text-slate-500 mt-1">PhonePe</span>
-              </button>
-              <button onClick={() => handlePayment('cred')} className="flex flex-col items-center gap-2 p-5 bg-slate-50 rounded-3xl hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
-                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm font-black text-sm italic group-hover:scale-110 transition-transform tracking-tight">CRED</div>
-                <span className="text-[10px] font-black uppercase text-slate-500 mt-1">Cred</span>
-              </button>
-              <button onClick={() => handlePayment('generic')} className="flex flex-col items-center gap-2 p-5 bg-slate-50 rounded-3xl hover:bg-white border border-transparent hover:border-slate-100 transition-all group">
-                <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform text-slate-700 font-black text-xs uppercase tracking-tighter">UPI</div>
-                <span className="text-[10px] font-black uppercase text-slate-500 mt-1 text-center">Other UPI</span>
-              </button>
-            </div>
-            
-            <div className="p-6 bg-slate-50 border-t border-slate-100">
-               <button onClick={() => setPaymentModal(null)} className="w-full py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors">Cancel Payment</button>
+              <button onClick={() => setPaymentModal(null)} className="w-full py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors">Cancel</button>
             </div>
           </div>
         </div>
