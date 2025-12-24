@@ -36,7 +36,6 @@ const App: React.FC = () => {
   const [shareStatus, setShareStatus] = useState<'idle' | 'saving' | 'copied' | 'error'>('idle');
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareEventId, setShareEventId] = useState<string | null>(null);
-  const [generatedShortUrl, setGeneratedShortUrl] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoadingShared, setIsLoadingShared] = useState(false);
 
@@ -67,7 +66,7 @@ const App: React.FC = () => {
             const localId = fetchedEvent.id || tripSlug;
             currentEvents[localId] = fetchedEvent;
             setCurrentEventId(localId);
-            // Clear hash after loading to avoid re-triggering
+            // Clear hash after loading to avoid re-triggering and keeping a clean URL
             window.history.replaceState(null, "", window.location.pathname);
           }
         } catch (err) {
@@ -197,9 +196,6 @@ const App: React.FC = () => {
         }]);
 
       if (error) throw error;
-      
-      const shortUrl = `${window.location.origin}/#/trip/${shortId}`;
-      setGeneratedShortUrl(shortUrl);
       setShareStatus('idle');
     } catch (err) {
       console.error("Supabase Sync Error:", err);
@@ -210,10 +206,14 @@ const App: React.FC = () => {
   const openShareModal = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     setShareEventId(id);
-    setGeneratedShortUrl(null);
     setShareStatus('idle');
     setShowShareModal(true);
   };
+
+  const currentUniqueUrl = useMemo(() => {
+    if (!shareEventId) return '';
+    return `${window.location.origin}/#/trip/${shareEventId}`;
+  }, [shareEventId]);
 
   const getWhatsAppText = () => {
     if (!activeEvent) return '';
@@ -225,7 +225,7 @@ const App: React.FC = () => {
           return `💸 *${fromName}* owes *${toName}*: ₹${s.amount.toFixed(2)}`;
         }).join('\n');
     
-    return `💰 *SplitIt: ${activeEvent.name}*\n\n*Current Settlements:*\n${settlementText}\n\n🔗 Open trip and settle:\n${generatedShortUrl}\n\nNo more awkward money talks! SplitIt handles it all for you.`;
+    return `💰 *SplitIt: ${activeEvent.name}*\n\n*Current Settlements:*\n${settlementText}\n\n🔗 Open trip and settle:\n${currentUniqueUrl}\n\nNo more awkward money talks! SplitIt handles it all for you.`;
   };
 
   const handleShareWhatsApp = () => {
@@ -242,7 +242,7 @@ const App: React.FC = () => {
       navigator.share({
         title: `SplitIt: ${activeEvent?.name}`,
         text: getWhatsAppText(),
-        url: generatedShortUrl || ''
+        url: currentUniqueUrl
       }).catch(console.error);
     } else {
       alert("Sharing via Arattai is best supported on mobile. Please copy the link instead.");
@@ -250,8 +250,8 @@ const App: React.FC = () => {
   };
 
   const handleCopyLink = () => {
-    if (!generatedShortUrl) return;
-    navigator.clipboard.writeText(generatedShortUrl).then(() => {
+    if (!currentUniqueUrl) return;
+    navigator.clipboard.writeText(currentUniqueUrl).then(() => {
       setShareStatus('copied');
       setTimeout(() => setShareStatus('idle'), 2000);
     });
@@ -336,7 +336,6 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8 space-y-8 animate-in fade-in duration-500">
-        {/* Event Stats & Sharing */}
         <div className="flex flex-col items-stretch justify-between bg-white px-8 py-6 rounded-[2rem] border border-slate-100 shadow-lg shadow-slate-100/50 gap-6 sm:flex-row sm:items-center">
           <div className="flex justify-around sm:justify-start gap-12 text-center sm:text-left">
             <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Spent</span><p className="text-3xl font-black">₹{totalSpent.toFixed(0)}</p></div>
@@ -347,12 +346,12 @@ const App: React.FC = () => {
 
         {activeTab === 'overview' ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* The Squad (ParticipantManager) is placed at order-1 for top visibility on mobile */}
+            {/* MOBILE-FIRST: Squad is order-1 (top) */}
             <div className="lg:col-span-3 order-1 lg:order-1">
               <ParticipantManager participants={activeEvent.participants} onAdd={addParticipant} onRemove={removeParticipant} />
             </div>
             
-            {/* Expense History at the bottom on mobile (order-3) */}
+            {/* MOBILE-FIRST: History is order-3 (bottom) */}
             <div className="lg:col-span-5 space-y-6 order-3 lg:order-2">
               <div className="bg-white border border-slate-100 rounded-[2rem] p-4 min-h-[400px] shadow-sm overflow-hidden">
                 <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 p-4 border-b border-slate-50 mb-4 flex items-center gap-2">
@@ -378,7 +377,7 @@ const App: React.FC = () => {
               </div>
             </div>
             
-            {/* Expense Form in the middle on mobile (order-2) */}
+            {/* MOBILE-FIRST: Transaction form is order-2 (middle) */}
             <div className="lg:col-span-4 order-2 lg:order-3">
               <ExpenseForm participants={activeEvent.participants} onAdd={addExpense} />
             </div>
@@ -397,41 +396,43 @@ const App: React.FC = () => {
               <button onClick={()=>setShowShareModal(false)} className="text-slate-400 hover:text-slate-800"><i className="fa-solid fa-xmark"></i></button>
             </div>
             <div className="p-8 space-y-6">
-              {shareStatus === 'saving' ? (
-                <div className="flex flex-col items-center py-10 gap-4">
-                  <div className="w-10 h-10 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin"></div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preparing Link...</p>
+              <div className="space-y-4">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center relative group">
+                  <p className="text-xs font-bold text-indigo-600 truncate pr-8">{currentUniqueUrl}</p>
+                  <button onClick={handleCopyLink} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600"><i className={`fa-solid ${shareStatus==='copied'?'fa-check text-green-500':'fa-copy'}`}></i></button>
                 </div>
-              ) : generatedShortUrl ? (
-                <div className="space-y-4">
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
-                    <p className="text-xs font-bold text-indigo-600 truncate">{generatedShortUrl}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button onClick={handleShareWhatsApp} className="flex flex-col items-center gap-2 p-5 bg-green-50 rounded-3xl hover:bg-green-100 transition-all">
-                      <div className="w-12 h-12 bg-green-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-green-100"><i className="fa-brands fa-whatsapp"></i></div>
-                      <span className="text-[10px] font-black uppercase text-green-700">WhatsApp</span>
-                    </button>
-                    <button onClick={handleShareGmail} className="flex flex-col items-center gap-2 p-5 bg-red-50 rounded-3xl hover:bg-red-100 transition-all">
-                      <div className="w-12 h-12 bg-red-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-red-100"><i className="fa-solid fa-envelope"></i></div>
-                      <span className="text-[10px] font-black uppercase text-red-700">Gmail</span>
-                    </button>
-                    <button onClick={handleShareArattai} className="flex flex-col items-center gap-2 p-5 bg-blue-50 rounded-3xl hover:bg-blue-100 transition-all">
-                      <div className="w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-blue-100"><i className="fa-solid fa-share-nodes"></i></div>
-                      <span className="text-[10px] font-black uppercase text-blue-700">Arattai</span>
-                    </button>
-                    <button onClick={handleCopyLink} className={`flex flex-col items-center gap-2 p-5 rounded-3xl transition-all ${shareStatus==='copied'?'bg-green-100':'bg-slate-50 hover:bg-slate-100'}`}>
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg ${shareStatus==='copied'?'bg-green-600':'bg-slate-800'}`}><i className={`fa-solid ${shareStatus==='copied'?'fa-check':'fa-link'}`}></i></div>
-                      <span className="text-[10px] font-black uppercase text-slate-700">{shareStatus==='copied'?'Copied':'Copy Link'}</span>
-                    </button>
-                  </div>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={handleShareWhatsApp} className="flex flex-col items-center gap-2 p-5 bg-green-50 rounded-3xl hover:bg-green-100 transition-all">
+                    <div className="w-12 h-12 bg-green-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-green-100"><i className="fa-brands fa-whatsapp"></i></div>
+                    <span className="text-[10px] font-black uppercase text-green-700">WhatsApp</span>
+                  </button>
+                  <button onClick={handleShareGmail} className="flex flex-col items-center gap-2 p-5 bg-red-50 rounded-3xl hover:bg-red-100 transition-all">
+                    <div className="w-12 h-12 bg-red-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-red-100"><i className="fa-solid fa-envelope"></i></div>
+                    <span className="text-[10px] font-black uppercase text-red-700">Gmail</span>
+                  </button>
+                  <button onClick={handleShareArattai} className="flex flex-col items-center gap-2 p-5 bg-blue-50 rounded-3xl hover:bg-blue-100 transition-all">
+                    <div className="w-12 h-12 bg-blue-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-blue-100"><i className="fa-solid fa-share-nodes"></i></div>
+                    <span className="text-[10px] font-black uppercase text-blue-700">Arattai</span>
+                  </button>
+                  <button onClick={handleCopyLink} className={`flex flex-col items-center gap-2 p-5 rounded-3xl transition-all ${shareStatus==='copied'?'bg-green-100':'bg-slate-50 hover:bg-slate-100'}`}>
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg ${shareStatus==='copied'?'bg-green-600':'bg-slate-800'}`}><i className={`fa-solid ${shareStatus==='copied'?'fa-check':'fa-link'}`}></i></div>
+                    <span className="text-[10px] font-black uppercase text-slate-700">{shareStatus==='copied'?'Copied':'Copy Link'}</span>
+                  </button>
                 </div>
-              ) : (
-                <button onClick={handleShareToSupabase} className="w-full bg-[#4f46e5] text-white py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-[#4338ca] transition-all">Sync & Generate Link</button>
-              )}
-              {shareStatus === 'error' && (
-                <p className="text-[10px] text-red-500 font-black text-center uppercase tracking-widest">Connection error. Check credentials.</p>
-              )}
+
+                <div className="pt-4 border-t border-slate-50">
+                   <button 
+                    onClick={handleShareToSupabase} 
+                    disabled={shareStatus === 'saving'}
+                    className="w-full flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-indigo-100 transition-all disabled:opacity-50"
+                  >
+                    {shareStatus === 'saving' ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-cloud-arrow-up"></i>}
+                    {shareStatus === 'saving' ? 'Syncing...' : 'Sync to Cloud'}
+                  </button>
+                  {shareStatus === 'error' && <p className="text-[9px] text-red-500 font-bold text-center mt-2">Could not sync. Local link works fine!</p>}
+                </div>
+              </div>
             </div>
           </div>
         </div>
