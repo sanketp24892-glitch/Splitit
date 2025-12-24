@@ -7,7 +7,6 @@ import ExpenseForm from './components/ExpenseForm.tsx';
 import SettlementView from './components/SettlementView.tsx';
 import { calculateBalances, calculateSettlements } from './utils/calculation.ts';
 
-// Helper to generate a 6-character random ID
 const generateShortId = () => {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -18,82 +17,80 @@ const generateShortId = () => {
 };
 
 const serializeEvent = (event: SplitEvent): string => {
-  const json = JSON.stringify(event);
-  return LZString.compressToEncodedURIComponent(json);
+  return LZString.compressToEncodedURIComponent(JSON.stringify(event));
 };
 
 const deserializeEvent = (data: string): SplitEvent | null => {
   try {
     const decompressed = LZString.decompressFromEncodedURIComponent(data);
-    if (!decompressed) return null;
-    return JSON.parse(decompressed);
+    return decompressed ? JSON.parse(decompressed) : null;
   } catch (e) {
-    console.error("Failed to deserialize event data", e);
     return null;
   }
 };
 
 const App: React.FC = () => {
   const [events, setEvents] = useState<Record<string, SplitEvent>>({});
-  const [currentEventId, setCurrentEventId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'settlement'>('overview');
-  const [newEventName, setNewEventName] = useState('');
-  
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
-  const [shareStatus, setShareStatus] = useState<'idle' | 'shortening' | 'copied' | 'error'>('idle');
-  const [showShareModal, setShowShareModal] = useState(false);
+  const [path, setPath] = useState(window.location.pathname);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [newEventName, setNewEventName] = useState('');
+  const [shareStatus, setShareStatus] = useState<'idle' | 'shortening' | 'copied'>('idle');
+  const [showShareModal, setShowShareModal] = useState(false);
 
-  // Sync state with URL Hash for Routing
+  // Router logic
   useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash;
+    const handleLocationChange = () => {
       const params = new URLSearchParams(window.location.search);
       const tripData = params.get('trip');
 
-      // Hydration from URL param
       if (tripData) {
         const sharedEvent = deserializeEvent(tripData);
         if (sharedEvent) {
           setEvents(prev => ({ ...prev, [sharedEvent.id]: sharedEvent }));
-          // Redirect to clean hash route
-          window.location.hash = `#/event/${sharedEvent.id}/overview`;
-          // Clean search params
-          window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+          window.history.replaceState(null, "", `/event/${sharedEvent.id}`);
+          setPath(`/event/${sharedEvent.id}`);
           return;
         }
       }
-
-      if (hash.startsWith('#/event/')) {
-        const parts = hash.split('/');
-        const id = parts[2];
-        const tab = parts[3] === 'settlement' ? 'settlement' : 'overview';
-        setCurrentEventId(id);
-        setActiveTab(tab as any);
-      } else {
-        setCurrentEventId(null);
-      }
+      setPath(window.location.pathname);
     };
 
     if (!isInitialized) {
-      const savedEvents = localStorage.getItem('splitit_multi_events');
-      if (savedEvents) setEvents(JSON.parse(savedEvents));
+      const saved = localStorage.getItem('splitit_storage');
+      if (saved) setEvents(JSON.parse(saved));
       setIsInitialized(true);
-      setTimeout(handleHashChange, 0);
+      handleLocationChange();
     }
 
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
   }, [isInitialized]);
 
-  // Save to LocalStorage
   useEffect(() => {
-    if (isInitialized) {
-      localStorage.setItem('splitit_multi_events', JSON.stringify(events));
-    }
+    if (isInitialized) localStorage.setItem('splitit_storage', JSON.stringify(events));
   }, [events, isInitialized]);
 
-  const activeEvent = currentEventId ? events[currentEventId] : null;
+  const navigate = (to: string) => {
+    window.history.pushState(null, "", to);
+    setPath(to);
+  };
+
+  // Route extraction
+  const routeMatch = useMemo(() => {
+    if (path === '/') return { type: 'home' };
+    if (path === '/create') return { type: 'create' };
+    const eventMatch = path.match(/^\/event\/([a-z0-9]{6})(\/settlement|\/expenses)?$/);
+    if (eventMatch) {
+      return { 
+        type: 'event', 
+        id: eventMatch[1], 
+        tab: eventMatch[2] === '/settlement' ? 'settlement' : 'overview' 
+      };
+    }
+    return { type: 'home' };
+  }, [path]);
+
+  const activeEvent = routeMatch.type === 'event' ? events[routeMatch.id] : null;
 
   const { balances, settlements, totalSpent } = useMemo(() => {
     if (!activeEvent) return { balances: [], settlements: [], totalSpent: 0 };
@@ -103,184 +100,93 @@ const App: React.FC = () => {
     return { balances: bals, settlements: setts, totalSpent: total };
   }, [activeEvent]);
 
-  const navigateTo = (path: string) => {
-    window.location.hash = path;
-  };
-
-  const createEvent = (e: React.FormEvent) => {
+  const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEventName.trim()) return;
     const id = generateShortId();
-    const newEv: SplitEvent = {
-      id,
-      name: newEventName.trim(),
-      participants: [],
-      expenses: [],
-      createdAt: Date.now()
-    };
+    const newEv: SplitEvent = { id, name: newEventName.trim(), participants: [], expenses: [], createdAt: Date.now() };
     setEvents(prev => ({ ...prev, [id]: newEv }));
     setNewEventName('');
-    navigateTo(`#/event/${id}/overview`);
+    navigate(`/event/${id}`);
   };
 
-  const deleteEvent = (id: string) => {
-    if (window.confirm("Permanently delete this group?")) {
-      const newEvents = { ...events };
-      delete newEvents[id];
-      setEvents(newEvents);
-      if (currentEventId === id) navigateTo('#/');
-    }
-  };
-
-  const updateActiveEvent = (updates: Partial<SplitEvent>) => {
-    if (!currentEventId) return;
-    setEvents(prev => ({
-      ...prev,
-      [currentEventId]: { ...prev[currentEventId], ...updates }
-    }));
-  };
-
-  const addParticipant = (name: string, upiId?: string) => {
+  const handleShortenShare = async () => {
     if (!activeEvent) return;
-    updateActiveEvent({
-      participants: [...activeEvent.participants, { id: crypto.randomUUID(), name, avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${name}&backgroundColor=4f46e5&textColor=ffffff`, upiId }]
-    });
-  };
-
-  const removeParticipant = (id: string) => {
-    if (!activeEvent) return;
-    updateActiveEvent({
-      participants: activeEvent.participants.filter(p => p.id !== id),
-      expenses: activeEvent.expenses.filter(e => e.payerId !== id && !e.participantIds.includes(id))
-    });
-  };
-
-  const addExpense = (newExp: Omit<Expense, 'id'>) => {
-    if (!activeEvent) return;
-    updateActiveEvent({
-      expenses: [{ ...newExp, id: crypto.randomUUID() }, ...activeEvent.expenses]
-    });
-  };
-
-  const removeExpense = (id: string) => {
-    if (!activeEvent) return;
-    updateActiveEvent({
-      expenses: activeEvent.expenses.filter(e => e.id !== id)
-    });
-    if (selectedExpense?.id === id) setSelectedExpense(null);
-  };
-
-  const handleSettle = (fromId: string, toId: string, amount: number) => {
-    if (!activeEvent) return;
-    const fromP = activeEvent.participants.find(p => p.id === fromId)?.name;
-    const toP = activeEvent.participants.find(p => p.id === toId)?.name;
-    addExpense({
-      description: `Settlement: ${fromP} paid ${toP}`,
-      amount: amount, payerId: fromId, participantIds: [toId], category: 'Payment', date: Date.now()
-    });
-  };
-
-  const getLongShareUrl = () => {
-    if (!activeEvent) return '';
-    const serialized = serializeEvent(activeEvent);
-    return `${window.location.origin}${window.location.pathname}?trip=${serialized}`;
-  };
-
-  const handleShortenAndCopy = async () => {
-    const longUrl = getLongShareUrl();
     setShareStatus('shortening');
+    const longUrl = `${window.location.origin}/event/${activeEvent.id}?trip=${serializeEvent(activeEvent)}`;
     try {
-      // TinyURL API (CORS might be an issue, providing fallback)
-      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
-      if (response.ok) {
-        const short = await response.text();
-        await navigator.clipboard.writeText(short);
-        setShareStatus('copied');
-      } else {
-        throw new Error();
-      }
-    } catch (e) {
+      const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
+      const short = res.ok ? await res.text() : longUrl;
+      await navigator.clipboard.writeText(short);
+      setShareStatus('copied');
+    } catch {
       await navigator.clipboard.writeText(longUrl);
       setShareStatus('copied');
     }
     setTimeout(() => setShareStatus('idle'), 2000);
   };
 
-  const handleWhatsAppShare = () => {
-    const longUrl = getLongShareUrl();
-    const settlementText = settlements.length === 0 
-      ? "All clear! No pending payments. ✅" 
-      : settlements.map(s => {
-          const fromName = activeEvent?.participants.find(p => p.id === s.from)?.name;
-          const toName = activeEvent?.participants.find(p => p.id === s.to)?.name;
-          return `💸 *${fromName}* owes *${toName}*: ₹${s.amount.toFixed(2)}`;
-        }).join('\n');
-    
-    const text = `💰 *SplitIt: ${activeEvent?.name}*\n\n*Settlements:*\n${settlementText}\n\n🔗 View Trip:\n${longUrl}`;
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
   const BrandingFooter = () => (
-    <footer className="w-full py-10 px-4 text-center space-y-2 bg-[#f8fafc]">
-       <p className="text-sm font-bold text-slate-400">good times in, awkward math out.</p>
-       <p className="text-xs font-black text-indigo-600 uppercase tracking-widest">
-         Try splitit now: <a href="https://splitits.in" className="underline decoration-2 underline-offset-4">splitits.in</a>
-       </p>
+    <footer className="w-full py-12 px-6 text-center space-y-3 bg-transparent mt-auto">
+      <p className="text-sm font-bold text-slate-400">good times in, awkward math out.</p>
+      <p className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.3em]">
+        Try splitit now: <span className="underline decoration-indigo-200 underline-offset-4 cursor-pointer" onClick={() => navigate('/')}>splitits.in</span>
+      </p>
     </footer>
   );
 
-  if (!isInitialized) {
-    return (
-      <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center font-sans">
-        <div className="w-12 h-12 border-4 border-slate-100 border-t-[#4f46e5] rounded-full animate-spin mb-4"></div>
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Loading SplitIt...</p>
-      </div>
-    );
-  }
+  if (!isInitialized) return null;
 
-  // Dashboard View (Home)
-  if (!currentEventId) {
+  // Render Views
+  if (routeMatch.type === 'home' || routeMatch.type === 'create') {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans">
-        <header className="bg-white border-b border-slate-100 p-6 sm:p-8 flex items-start justify-start">
-          <div className="flex items-center gap-3 sm:gap-4 cursor-pointer" onClick={() => navigateTo('#/')}>
-             <div className="w-12 h-12 bg-[#4f46e5] rounded-2xl flex items-center justify-center text-white text-3xl shadow-lg shadow-indigo-100">
-               <i className="fa-solid fa-receipt"></i>
-             </div>
-             <div className="flex flex-col items-start text-left">
-               <h1 className="text-3xl font-black text-slate-900 tracking-tighter">SplitIt</h1>
-               <p className="text-xs font-medium text-slate-400 lowercase -mt-1 tracking-tight">good times in, awkward math out.</p>
-             </div>
+        <header className="p-8 sm:p-12">
+          <div className="max-w-6xl mx-auto flex items-center gap-4 cursor-pointer" onClick={() => navigate('/')}>
+            <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-3xl shadow-xl shadow-indigo-100">
+              <i className="fa-solid fa-receipt"></i>
+            </div>
+            <div>
+              <h1 className="text-4xl font-black text-slate-900 tracking-tighter">SplitIt</h1>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest -mt-1">simplified group math</p>
+            </div>
           </div>
         </header>
 
-        <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-10 sm:py-20 space-y-12">
-          <section className="bg-white rounded-[2.5rem] p-8 sm:p-16 shadow-2xl shadow-indigo-100/40 border border-slate-50 text-center space-y-10">
-            <h2 className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight leading-tight">Start an Event</h2>
-            <form onSubmit={createEvent} className="max-w-md mx-auto flex flex-col gap-4">
+        <main className="flex-1 max-w-xl mx-auto w-full px-6 py-10 space-y-12">
+          <section className="bg-white rounded-[2.5rem] p-8 sm:p-12 shadow-2xl shadow-indigo-100/30 border border-slate-50 text-center space-y-8">
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Create New Event</h2>
+            <form onSubmit={handleCreate} className="space-y-4">
               <input 
                 type="text" 
+                autoFocus
                 value={newEventName}
                 onChange={e => setNewEventName(e.target.value)}
-                placeholder="Event Name (e.g. Goa Trip)"
-                className="w-full px-8 py-5 rounded-3xl bg-slate-50 border-2 border-transparent focus:border-[#4f46e5] focus:bg-white text-lg font-bold transition-all outline-none shadow-inner"
+                placeholder="Trip or Party Name"
+                className="w-full px-8 py-5 rounded-3xl bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white text-lg font-bold transition-all outline-none"
               />
-              <button type="submit" className="bg-[#4f46e5] text-white py-5 rounded-3xl font-black text-sm hover:bg-[#4338ca] transition-all shadow-xl active:scale-95 uppercase tracking-widest">Create an Event</button>
+              <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl hover:bg-indigo-700 active:scale-95 transition-all">Start Splitting</button>
             </form>
           </section>
 
-          {Object.keys(events).length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {(Object.values(events) as SplitEvent[]).sort((a,b)=>b.createdAt-a.createdAt).map(ev => (
-                <div key={ev.id} onClick={()=>navigateTo(`#/event/${ev.id}/overview`)} className="bg-white p-6 rounded-[2rem] border border-slate-100 hover:shadow-xl transition-all cursor-pointer group">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black">{ev.name.charAt(0)}</div>
-                    <button onClick={(e)=>{e.stopPropagation(); deleteEvent(ev.id)}} className="text-slate-200 hover:text-red-500 transition-colors p-2"><i className="fa-solid fa-trash-can"></i></button>
+          {Object.keys(events).length > 0 && routeMatch.type === 'home' && (
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-2">Your Recent Squads</h3>
+              <div className="grid grid-cols-1 gap-4">
+                {/* Fixed TS error: Cast Object.values to SplitEvent[] to ensure correct type inference during sort/map */}
+                {(Object.values(events) as SplitEvent[]).sort((a,b)=>b.createdAt-a.createdAt).map(ev => (
+                  <div key={ev.id} onClick={()=>navigate(`/event/${ev.id}`)} className="bg-white p-6 rounded-3xl border border-slate-100 hover:shadow-xl transition-all cursor-pointer flex justify-between items-center group">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center font-black">{ev.name.charAt(0)}</div>
+                      <div>
+                        <h4 className="font-black text-slate-800">{ev.name}</h4>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{ev.participants.length} members • {ev.id}</p>
+                      </div>
+                    </div>
+                    <i className="fa-solid fa-chevron-right text-slate-200 group-hover:text-indigo-600 transition-colors"></i>
                   </div>
-                  <h4 className="text-xl font-black text-slate-800 line-clamp-1">{ev.name}</h4>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mt-1 tracking-widest">{ev.participants.length} Members • ₹{ev.expenses.reduce((acc,curr)=>curr.category!=='Payment'?acc+curr.amount:acc,0).toFixed(0)}</p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </main>
@@ -289,132 +195,98 @@ const App: React.FC = () => {
     );
   }
 
-  // Active View
+  if (!activeEvent) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center space-y-4">
+        <h2 className="text-2xl font-black">Trip Not Found</h2>
+        <button onClick={() => navigate('/')} className="px-8 py-3 bg-indigo-600 text-white rounded-2xl font-bold">Go Home</button>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans">
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-30 shadow-sm px-4">
-        <div className="max-w-7xl mx-auto h-20 flex items-center justify-between gap-4">
+      <header className="bg-white border-b border-slate-100 sticky top-0 z-40 px-4 h-20 shadow-sm">
+        <div className="max-w-7xl mx-auto h-full flex items-center justify-between gap-4">
           <div className="flex items-center gap-4 min-w-0">
-            <button onClick={()=>navigateTo('#/')} className="w-10 h-10 rounded-xl hover:bg-slate-50 flex items-center justify-center text-slate-400"><i className="fa-solid fa-arrow-left"></i></button>
+            <button onClick={()=>navigate('/')} className="w-10 h-10 rounded-xl hover:bg-slate-50 flex items-center justify-center text-slate-400"><i className="fa-solid fa-arrow-left"></i></button>
             <div className="min-w-0">
-              <h1 className="text-lg font-black text-slate-900 truncate uppercase tracking-tight">{activeEvent.name}</h1>
-              <p className="text-[9px] font-bold text-slate-400 tracking-widest uppercase -mt-0.5">SplitIt Safe</p>
+              <h1 className="text-lg font-black truncate uppercase tracking-tight">{activeEvent.name}</h1>
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{activeEvent.id}</p>
             </div>
           </div>
           <nav className="flex bg-slate-100 p-1 rounded-xl">
-            <button 
-              onClick={()=>navigateTo(`#/event/${currentEventId}/overview`)} 
-              className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${activeTab==='overview'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}
-            >
-              Overview
-            </button>
-            <button 
-              onClick={()=>navigateTo(`#/event/${currentEventId}/settlement`)} 
-              className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${activeTab==='settlement'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}
-            >
-              Settlement
-            </button>
+            <button onClick={()=>navigate(`/event/${activeEvent.id}`)} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${routeMatch.tab==='overview'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>OVERVIEW</button>
+            <button onClick={()=>navigate(`/event/${activeEvent.id}/settlement`)} className={`px-4 py-2 rounded-lg text-xs font-black uppercase transition-all ${routeMatch.tab==='settlement'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>SETTLEMENT</button>
           </nav>
         </div>
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8 space-y-8 animate-in fade-in duration-500">
-        <div className="flex flex-col items-stretch justify-between bg-white px-8 py-6 rounded-[2rem] border border-slate-100 shadow-lg shadow-slate-100/50 gap-6 sm:flex-row sm:items-center">
-          <div className="flex justify-around sm:justify-start gap-12 text-center sm:text-left">
+        <div className="bg-white px-8 py-6 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-100/50 flex flex-col sm:flex-row justify-between items-center gap-6">
+          <div className="flex gap-12 text-center sm:text-left">
             <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Spent</span><p className="text-3xl font-black">₹{totalSpent.toFixed(0)}</p></div>
             <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Squad</span><p className="text-3xl font-black">{activeEvent.participants.length}</p></div>
           </div>
-          <button 
-            onClick={() => setShowShareModal(true)} 
-            className="bg-[#4f46e5] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#4338ca] shadow-lg active:scale-95 transition-all"
-          >
-            Share Trip
-          </button>
+          <button onClick={()=>setShowShareModal(true)} className="w-full sm:w-auto bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">Invite Friends</button>
         </div>
 
-        {activeTab === 'overview' ? (
+        {routeMatch.tab === 'overview' ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-3 order-1 lg:order-1">
-              <ParticipantManager participants={activeEvent.participants} onAdd={addParticipant} onRemove={removeParticipant} />
-            </div>
-            <div className="lg:col-span-5 space-y-6 order-3 lg:order-2">
-              <div className="bg-white border border-slate-100 rounded-[2rem] p-4 min-h-[400px] shadow-sm overflow-hidden">
-                <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 p-4 border-b border-slate-50 mb-4 flex items-center gap-2">
-                  <i className="fa-solid fa-clock-rotate-left"></i>History
-                </h2>
+            <div className="lg:col-span-3 order-1"><ParticipantManager participants={activeEvent.participants} onAdd={(n, u)=>setEvents(prev => ({ ...prev, [activeEvent.id]: { ...activeEvent, participants: [...activeEvent.participants, { id: crypto.randomUUID(), name: n, upiId: u, avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${n}&backgroundColor=4f46e5&textColor=ffffff` }] }}))} onRemove={(id)=>setEvents(prev => ({ ...prev, [activeEvent.id]: { ...activeEvent, participants: activeEvent.participants.filter(p=>p.id!==id) }}))} /></div>
+            <div className="lg:col-span-5 order-3 lg:order-2 space-y-6">
+              <div className="bg-white border border-slate-100 rounded-[2.5rem] p-6 shadow-sm overflow-hidden min-h-[400px]">
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-6">Activity Feed</h3>
                 <div className="space-y-4 max-h-[600px] overflow-y-auto scrollbar-hide">
-                  {activeEvent.expenses.length === 0 ? (
-                    <div className="text-center py-20 text-slate-300 font-bold uppercase text-[10px]">No records found</div>
-                  ) : (
-                    activeEvent.expenses.sort((a,b)=>b.date-a.date).map(e => (
-                      <div key={e.id} onClick={()=>setSelectedExpense(e)} className={`p-4 mx-2 rounded-2xl border transition-all cursor-pointer ${e.category==='Payment'?'bg-green-50/50 border-green-100 italic':'bg-white border-slate-50 hover:border-indigo-100 hover:bg-slate-50'}`}>
-                        <div className="flex justify-between items-center">
-                          <div className="min-w-0">
-                            <p className="font-bold text-slate-800 truncate">{e.description}</p>
-                            <p className="text-[9px] text-slate-400 font-bold uppercase">{activeEvent.participants.find(p=>p.id===e.payerId)?.name} paid</p>
-                          </div>
-                          <p className="font-black text-slate-900">₹{e.amount.toFixed(0)}</p>
+                  {activeEvent.expenses.length === 0 ? <div className="text-center py-20 text-slate-200 font-black text-[10px] uppercase tracking-widest">No activity yet</div> : activeEvent.expenses.sort((a,b)=>b.date-a.date).map(e => (
+                    <div key={e.id} className={`p-5 rounded-3xl border transition-all ${e.category==='Payment'?'bg-green-50/50 border-green-100 italic':'bg-white border-slate-50 hover:border-indigo-100'}`}>
+                      <div className="flex justify-between items-center">
+                        <div className="min-w-0">
+                          <p className="font-black text-slate-800 truncate">{e.description}</p>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{activeEvent.participants.find(p=>p.id===e.payerId)?.name} paid</p>
                         </div>
+                        <p className="font-black text-slate-900 ml-4">₹{e.amount.toFixed(0)}</p>
                       </div>
-                    ))
-                  )}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
-            <div className="lg:col-span-4 order-2 lg:order-3">
-              <ExpenseForm participants={activeEvent.participants} onAdd={addExpense} />
-            </div>
+            <div className="lg:col-span-4 order-2 lg:order-3"><ExpenseForm participants={activeEvent.participants} onAdd={(exp)=>setEvents(prev => ({ ...prev, [activeEvent.id]: { ...activeEvent, expenses: [{...exp, id: crypto.randomUUID()}, ...activeEvent.expenses] }}))} /></div>
           </div>
         ) : (
-          <SettlementView participants={activeEvent.participants} balances={balances} settlements={settlements} totalSpent={totalSpent} onSettle={handleSettle} />
+          <SettlementView 
+            participants={activeEvent.participants} 
+            balances={balances} 
+            settlements={settlements} 
+            totalSpent={totalSpent} 
+            onSettle={(f, t, a) => setEvents(prev => ({ ...prev, [activeEvent.id]: { ...activeEvent, expenses: [{ id: crypto.randomUUID(), description: `Settlement: ${activeEvent.participants.find(p=>p.id===f)?.name} paid ${activeEvent.participants.find(p=>p.id===t)?.name}`, amount: a, payerId: f, participantIds: [t], category: 'Payment', date: Date.now() }, ...activeEvent.expenses] }}))}
+          />
         )}
       </main>
-
       <BrandingFooter />
 
       {/* Share Modal */}
       {showShareModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl overflow-hidden animate-in zoom-in-95">
-            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <h3 className="text-xl font-black text-slate-800">Share Trip</h3>
-              <button onClick={()=>setShowShareModal(false)} className="text-slate-400 hover:text-slate-800"><i className="fa-solid fa-xmark"></i></button>
+            <div className="p-10 border-b border-slate-100 flex flex-col items-center bg-slate-50/50 text-center">
+              <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-3xl mb-4 shadow-xl shadow-indigo-100"><i className="fa-solid fa-link"></i></div>
+              <h3 className="text-xl font-black text-slate-900">Invite Squad</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Anyone with this link can view & edit</p>
             </div>
             <div className="p-8 space-y-4">
               <button 
-                onClick={handleShortenAndCopy}
+                /* Fixed logic: Pointed to the correct function handleShortenShare */
+                onClick={handleShortenShare}
                 disabled={shareStatus === 'shortening'}
-                className={`w-full flex items-center justify-center gap-3 py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all shadow-xl active:scale-95 ${shareStatus==='copied' ? 'bg-green-500 text-white' : 'bg-[#4f46e5] text-white hover:bg-[#4338ca]'}`}
+                className={`w-full flex items-center justify-center gap-3 py-5 rounded-3xl font-black text-xs uppercase tracking-widest transition-all shadow-xl active:scale-95 ${shareStatus==='copied' ? 'bg-green-500 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
               >
-                {shareStatus === 'shortening' ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className={`fa-solid ${shareStatus==='copied'?'fa-check':'fa-link'}`}></i>}
-                {shareStatus === 'shortening' ? 'Shortening...' : shareStatus === 'copied' ? 'Link Copied!' : 'Copy Share Link'}
+                {shareStatus === 'shortening' ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className={`fa-solid ${shareStatus==='copied'?'fa-check':'fa-copy'}`}></i>}
+                {shareStatus === 'shortening' ? 'Generating Short Link...' : shareStatus === 'copied' ? 'Link Copied!' : 'Copy Shareable Link'}
               </button>
-              
-              <button onClick={handleWhatsAppShare} className="w-full flex items-center justify-center gap-3 py-5 bg-green-500 text-white rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-green-600 shadow-xl transition-all">
-                <i className="fa-brands fa-whatsapp text-xl"></i>
-                WhatsApp
-              </button>
-              
-              <p className="text-[9px] text-slate-400 font-bold text-center uppercase tracking-widest leading-relaxed px-4">
-                This link includes all data. <br/> Shared friends can add their expenses.
-              </p>
+              <button onClick={() => setShowShareModal(false)} className="w-full py-2 text-[10px] font-black text-slate-300 uppercase tracking-widest hover:text-slate-500 transition-colors">Dismiss</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {selectedExpense && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-          <div className="bg-white rounded-[2.5rem] max-w-lg w-full p-8 space-y-6 shadow-2xl animate-in zoom-in-95">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Detail</h3>
-              <button onClick={()=>setSelectedExpense(null)} className="text-slate-400 hover:text-slate-800"><i className="fa-solid fa-xmark"></i></button>
-            </div>
-            <div className="space-y-4 pt-4 border-t border-slate-50">
-              <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Label</span><span className="font-bold text-slate-800">{selectedExpense.description}</span></div>
-              <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Amount</span><span className="font-black text-indigo-600 text-2xl">₹{selectedExpense.amount.toFixed(2)}</span></div>
-            </div>
-            <button onClick={()=>{removeExpense(selectedExpense.id); setSelectedExpense(null);}} className="w-full py-5 bg-red-50 text-red-500 font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-red-100 transition-all border border-red-100"><i className="fa-solid fa-trash-can mr-2"></i>Delete Record</button>
           </div>
         </div>
       )}
