@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 import { Participant, Expense, Settlement, Balance, SplitEvent } from './types.ts';
 import ParticipantManager from './components/ParticipantManager.tsx';
 import ExpenseForm from './components/ExpenseForm.tsx';
@@ -17,10 +17,10 @@ const generateShortId = () => {
   return result;
 };
 
-// Initialize Supabase client safely
+// Initialize Supabase client safely from window.process.env polyfill
 const getSupabase = () => {
-  const url = process.env.SUPABASE_URL || 'https://yrlvjtnxusbgqeqgaonu.supabase.co';
-  const key = process.env.SUPABASE_ANON_KEY || 'sb_publishable_bFgmsQkkShvZYtyLf7ASEA_I1J6Y3zw';
+  const url = (window as any).process?.env?.SUPABASE_URL || 'https://yrlvjtnxusbgqeqgaonu.supabase.co';
+  const key = (window as any).process?.env?.SUPABASE_ANON_KEY || 'sb_publishable_bFgmsQkkShvZYtyLf7ASEA_I1J6Y3zw';
   if (!url || !key) return null;
   return createClient(url, key);
 };
@@ -42,7 +42,7 @@ const App: React.FC = () => {
 
   const getAvatar = (name: string) => `https://api.dicebear.com/7.x/initials/svg?seed=${name}&backgroundColor=4f46e5&textColor=ffffff`;
 
-  // Fetch Logic: Check for short trip ID in hash
+  // Fetch Logic: Check for short trip ID in hash on initial load
   useEffect(() => {
     const loadInitialData = async () => {
       const savedEvents = localStorage.getItem('splitit_multi_events');
@@ -67,6 +67,7 @@ const App: React.FC = () => {
             const localId = fetchedEvent.id || tripSlug;
             currentEvents[localId] = fetchedEvent;
             setCurrentEventId(localId);
+            // Clear hash after loading to avoid re-triggering
             window.history.replaceState(null, "", window.location.pathname);
           }
         } catch (err) {
@@ -83,6 +84,7 @@ const App: React.FC = () => {
     loadInitialData();
   }, []);
 
+  // Save local changes to localStorage
   useEffect(() => {
     if (isInitialized) {
       localStorage.setItem('splitit_multi_events', JSON.stringify(events));
@@ -223,7 +225,7 @@ const App: React.FC = () => {
           return `💸 *${fromName}* owes *${toName}*: ₹${s.amount.toFixed(2)}`;
         }).join('\n');
     
-    return `💰 *SplitIt: ${activeEvent.name}*\n\n*Current Settlements:*\n${settlementText}\n\n🔗 Open trip and settle:\n${generatedShortUrl}\n\nNo more awkward money talks! SplitIt handles it all for you.\nTry it Now: splitits.in`;
+    return `💰 *SplitIt: ${activeEvent.name}*\n\n*Current Settlements:*\n${settlementText}\n\n🔗 Open trip and settle:\n${generatedShortUrl}\n\nNo more awkward money talks! SplitIt handles it all for you.`;
   };
 
   const handleShareWhatsApp = () => {
@@ -264,11 +266,11 @@ const App: React.FC = () => {
     );
   }
 
-  // Dashboard
+  // Dashboard View
   if (!currentEventId) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans">
-        <header className="bg-white border-b border-slate-100 p-6 sm:p-8 flex items-start">
+        <header className="bg-white border-b border-slate-100 p-6 sm:p-8 flex items-start justify-start">
           <div className="flex items-center gap-3 sm:gap-4">
              <div className="w-12 h-12 bg-[#4f46e5] rounded-2xl flex items-center justify-center text-white text-3xl shadow-lg shadow-indigo-100">
                <i className="fa-solid fa-receipt"></i>
@@ -314,7 +316,7 @@ const App: React.FC = () => {
     );
   }
 
-  // Active View
+  // Active Event View
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans">
       <header className="bg-white border-b border-slate-100 sticky top-0 z-30 shadow-sm px-4">
@@ -334,36 +336,49 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8 space-y-8 animate-in fade-in duration-500">
+        {/* Event Stats & Sharing */}
         <div className="flex flex-col items-stretch justify-between bg-white px-8 py-6 rounded-[2rem] border border-slate-100 shadow-lg shadow-slate-100/50 gap-6 sm:flex-row sm:items-center">
           <div className="flex justify-around sm:justify-start gap-12 text-center sm:text-left">
             <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Spent</span><p className="text-3xl font-black">₹{totalSpent.toFixed(0)}</p></div>
             <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Squad</span><p className="text-3xl font-black">{activeEvent.participants.length}</p></div>
           </div>
-          <button onClick={(e)=>openShareModal(e, activeEvent.id)} className="bg-[#4f46e5] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#4338ca] shadow-lg active:scale-95">Share with Squad</button>
+          <button onClick={(e)=>openShareModal(e, activeEvent.id)} className="bg-[#4f46e5] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#4338ca] shadow-lg active:scale-95 transition-all">Share with Squad</button>
         </div>
 
         {activeTab === 'overview' ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* "The Squad" moved to order-1 for mobile, lg:order-1 for desktop */}
+            {/* The Squad (ParticipantManager) is placed at order-1 for top visibility on mobile */}
             <div className="lg:col-span-3 order-1 lg:order-1">
               <ParticipantManager participants={activeEvent.participants} onAdd={addParticipant} onRemove={removeParticipant} />
             </div>
-            {/* Expense History order-3 for mobile, lg:order-2 for desktop */}
+            
+            {/* Expense History at the bottom on mobile (order-3) */}
             <div className="lg:col-span-5 space-y-6 order-3 lg:order-2">
               <div className="bg-white border border-slate-100 rounded-[2rem] p-4 min-h-[400px] shadow-sm overflow-hidden">
-                <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 p-4 border-b border-slate-50 mb-4 flex items-center gap-2"><i className="fa-solid fa-clock-rotate-left"></i>History</h2>
+                <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 p-4 border-b border-slate-50 mb-4 flex items-center gap-2">
+                  <i className="fa-solid fa-clock-rotate-left"></i>History
+                </h2>
                 <div className="space-y-4 max-h-[600px] overflow-y-auto scrollbar-hide">
-                  {activeEvent.expenses.length === 0 ? <div className="text-center py-20 text-slate-300 font-bold uppercase text-[10px]">No records found</div> : 
+                  {activeEvent.expenses.length === 0 ? (
+                    <div className="text-center py-20 text-slate-300 font-bold uppercase text-[10px]">No records found</div>
+                  ) : (
                     activeEvent.expenses.sort((a,b)=>b.date-a.date).map(e => (
                       <div key={e.id} onClick={()=>setSelectedExpense(e)} className={`p-4 mx-2 rounded-2xl border transition-all cursor-pointer ${e.category==='Payment'?'bg-green-50/50 border-green-100 italic':'bg-white border-slate-50 hover:border-indigo-100 hover:bg-slate-50'}`}>
-                        <div className="flex justify-between items-center"><div className="min-w-0"><p className="font-bold text-slate-800 truncate">{e.description}</p><p className="text-[9px] text-slate-400 font-bold uppercase">{activeEvent.participants.find(p=>p.id===e.payerId)?.name} paid</p></div><p className="font-black text-slate-900">₹{e.amount.toFixed(0)}</p></div>
+                        <div className="flex justify-between items-center">
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-800 truncate">{e.description}</p>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">{activeEvent.participants.find(p=>p.id===e.payerId)?.name} paid</p>
+                          </div>
+                          <p className="font-black text-slate-900">₹{e.amount.toFixed(0)}</p>
+                        </div>
                       </div>
                     ))
-                  }
+                  )}
                 </div>
               </div>
             </div>
-            {/* Expense Form order-2 for mobile, lg:order-3 for desktop */}
+            
+            {/* Expense Form in the middle on mobile (order-2) */}
             <div className="lg:col-span-4 order-2 lg:order-3">
               <ExpenseForm participants={activeEvent.participants} onAdd={addExpense} />
             </div>
@@ -373,6 +388,7 @@ const App: React.FC = () => {
         )}
       </main>
 
+      {/* Sharing Modal */}
       {showShareModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
           <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl overflow-hidden animate-in zoom-in-95">
@@ -382,10 +398,15 @@ const App: React.FC = () => {
             </div>
             <div className="p-8 space-y-6">
               {shareStatus === 'saving' ? (
-                <div className="flex flex-col items-center py-10 gap-4"><div className="w-10 h-10 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin"></div><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preparing Link...</p></div>
+                <div className="flex flex-col items-center py-10 gap-4">
+                  <div className="w-10 h-10 border-4 border-slate-100 border-t-indigo-600 rounded-full animate-spin"></div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Preparing Link...</p>
+                </div>
               ) : generatedShortUrl ? (
                 <div className="space-y-4">
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center"><p className="text-xs font-bold text-indigo-600 truncate">{generatedShortUrl}</p></div>
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                    <p className="text-xs font-bold text-indigo-600 truncate">{generatedShortUrl}</p>
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <button onClick={handleShareWhatsApp} className="flex flex-col items-center gap-2 p-5 bg-green-50 rounded-3xl hover:bg-green-100 transition-all">
                       <div className="w-12 h-12 bg-green-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-lg shadow-green-100"><i className="fa-brands fa-whatsapp"></i></div>
@@ -408,6 +429,9 @@ const App: React.FC = () => {
               ) : (
                 <button onClick={handleShareToSupabase} className="w-full bg-[#4f46e5] text-white py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-[#4338ca] transition-all">Sync & Generate Link</button>
               )}
+              {shareStatus === 'error' && (
+                <p className="text-[10px] text-red-500 font-black text-center uppercase tracking-widest">Connection error. Check credentials.</p>
+              )}
             </div>
           </div>
         </div>
@@ -416,7 +440,10 @@ const App: React.FC = () => {
       {selectedExpense && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
           <div className="bg-white rounded-[2.5rem] max-w-lg w-full p-8 space-y-6 shadow-2xl animate-in zoom-in-95">
-            <div className="flex justify-between items-center"><h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Record Detail</h3><button onClick={()=>setSelectedExpense(null)} className="text-slate-400 hover:text-slate-800"><i className="fa-solid fa-xmark"></i></button></div>
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Record Detail</h3>
+              <button onClick={()=>setSelectedExpense(null)} className="text-slate-400 hover:text-slate-800"><i className="fa-solid fa-xmark"></i></button>
+            </div>
             <div className="space-y-4 pt-4 border-t border-slate-50">
               <div className="flex justify-between">
                 <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Label</span>
@@ -427,7 +454,9 @@ const App: React.FC = () => {
                 <span className="font-black text-indigo-600 text-2xl">₹{selectedExpense.amount.toFixed(2)}</span>
               </div>
             </div>
-            <button onClick={()=>{removeExpense(selectedExpense.id); setSelectedExpense(null);}} className="w-full py-5 bg-red-50 text-red-500 font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-red-100 transition-all border border-red-100"><i className="fa-solid fa-trash-can mr-2"></i>Delete Record</button>
+            <button onClick={()=>{removeExpense(selectedExpense.id); setSelectedExpense(null);}} className="w-full py-5 bg-red-50 text-red-500 font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-red-100 transition-all border border-red-100">
+              <i className="fa-solid fa-trash-can mr-2"></i>Delete Record
+            </button>
           </div>
         </div>
       )}
