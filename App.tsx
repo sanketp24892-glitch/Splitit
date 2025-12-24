@@ -7,6 +7,11 @@ import SettlementView from './components/SettlementView.tsx';
 import { calculateBalances, calculateSettlements } from './utils/calculation.ts';
 import * as db from './services/supabaseService.ts';
 
+interface RecentEvent {
+  code: string;
+  name: string;
+}
+
 const generateShortId = () => {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -25,7 +30,7 @@ const App: React.FC = () => {
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle');
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
-  const [recentCodes, setRecentCodes] = useState<string[]>([]);
+  const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
 
   const navigate = (to: string) => {
     window.history.pushState(null, "", to);
@@ -48,24 +53,32 @@ const App: React.FC = () => {
   }, [path]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('splitit_recent_codes');
-    if (saved) setRecentCodes(JSON.parse(saved));
+    const saved = localStorage.getItem('splitit_recent_events_v2');
+    if (saved) setRecentEvents(JSON.parse(saved));
   }, []);
 
-  const addToRecent = (code: string) => {
-    const updated = [code, ...recentCodes.filter(c => c !== code)].slice(0, 5);
-    setRecentCodes(updated);
-    localStorage.setItem('splitit_recent_codes', JSON.stringify(updated));
+  const addToRecent = (code: string, name: string) => {
+    setRecentEvents(prev => {
+      const filtered = prev.filter(e => e.code !== code);
+      const updated = [{ code, name }, ...filtered].slice(0, 5);
+      localStorage.setItem('splitit_recent_events_v2', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const loadData = async (code: string) => {
     setLoading(true);
-    const data = await db.fetchEventByCode(code);
-    if (data) {
-      setActiveEvent(data);
-      addToRecent(code);
+    try {
+      const data = await db.fetchEventByCode(code);
+      if (data) {
+        setActiveEvent(data);
+        addToRecent(code, data.name);
+      }
+    } catch (err) {
+      console.error("Failed to load event:", err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -95,29 +108,44 @@ const App: React.FC = () => {
     e.preventDefault();
     if (!newEventName.trim()) return;
     const code = generateShortId();
-    await db.createEvent(newEventName.trim(), code);
-    navigate(`/event/${code}`);
+    try {
+      await db.createEvent(newEventName.trim(), code);
+      addToRecent(code, newEventName.trim());
+      navigate(`/event/${code}`);
+    } catch (err) {
+      alert("Failed to create event. Please try again.");
+    }
   };
 
   const handleAddParticipant = async (name: string, upiId?: string) => {
     if (!activeEvent) return;
-    await db.addParticipant(activeEvent.id, { 
-      name, 
-      upiId, 
-      avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${name}&backgroundColor=4f46e5&textColor=ffffff` 
-    });
-    loadData(routeMatch.code); // Manual refresh
+    try {
+      await db.addParticipant(activeEvent.id, { 
+        name, 
+        upiId, 
+        avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}&backgroundColor=4f46e5&textColor=ffffff` 
+      });
+      // Immediate reload to show the new member
+      await loadData(routeMatch.code);
+    } catch (err) {
+      console.error("Add participant error:", err);
+      alert("Failed to add member. Check your connection.");
+    }
   };
 
   const handleAddExpense = async (exp: Omit<Expense, 'id'>) => {
     if (!activeEvent) return;
-    await db.addExpense(activeEvent.id, exp);
-    loadData(routeMatch.code); // Manual refresh
+    try {
+      await db.addExpense(activeEvent.id, exp);
+      await loadData(routeMatch.code);
+    } catch (err) {
+      console.error("Add expense error:", err);
+    }
   };
 
   const handleShare = (type: 'whatsapp' | 'sms' | 'copy') => {
     const url = window.location.origin + `/event/${routeMatch.code}`;
-    const text = `Join my event "${activeEvent?.name}" on SplitIt to track expenses together: ${url}`;
+    const text = `Join our event "${activeEvent?.name}" on SplitIt to track expenses: ${url}`;
     
     if (type === 'whatsapp') {
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
@@ -149,38 +177,39 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-1 flex flex-col items-center justify-center px-6 max-w-4xl mx-auto w-full text-center space-y-12">
+        <main className="flex-1 flex flex-col items-center justify-center px-6 max-w-4xl mx-auto w-full text-center space-y-12 pt-20">
           <div className="space-y-6">
-            <h1 className="text-[56px] sm:text-[90px] font-[900] text-slate-900 tracking-tighter leading-[0.95] max-w-2xl mx-auto">
+            <h1 className="text-[48px] sm:text-[90px] font-[900] text-slate-900 tracking-tighter leading-[0.95] max-w-2xl mx-auto">
               Stop doing <span className="text-indigo-600 italic">awkward</span> math.
             </h1>
-            <p className="text-lg sm:text-2xl font-medium text-slate-400 max-w-lg mx-auto leading-relaxed">
-              The cleanest way to split bills, track group expenses, and settle debts instantly with the squad.
+            <p className="text-md sm:text-2xl font-medium text-slate-400 max-w-lg mx-auto leading-relaxed">
+              The cleanest way to split bills and settle debts with the squad.
             </p>
           </div>
 
-          <div className="flex flex-col items-center gap-10">
-            <div className="relative group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full blur opacity-25 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
+          <div className="flex flex-col items-center gap-10 w-full">
+            <div className="relative group w-full max-w-xs">
+              <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full blur opacity-25 group-hover:opacity-40 transition duration-1000"></div>
               <button 
                 onClick={() => navigate('/create')}
-                className="relative px-12 py-6 bg-indigo-600 text-white rounded-full font-black text-sm uppercase tracking-widest shadow-2xl active:scale-95 transition-all hover:bg-indigo-700"
+                className="relative w-full px-8 py-5 bg-indigo-600 text-white rounded-full font-black text-xs uppercase tracking-widest shadow-2xl active:scale-95 transition-all hover:bg-indigo-700"
               >
                 Start an Event
               </button>
             </div>
 
-            {recentCodes.length > 0 && (
-              <div className="space-y-4 animate-in">
-                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Recently Visited</p>
+            {recentEvents.length > 0 && (
+              <div className="space-y-4 animate-in w-full px-4">
+                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Recent Events</p>
                 <div className="flex flex-wrap justify-center gap-3">
-                  {recentCodes.map(code => (
+                  {recentEvents.map(event => (
                     <button 
-                      key={code} 
-                      onClick={() => navigate(`/event/${code}`)}
-                      className="px-5 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold text-slate-600 hover:bg-white hover:border-indigo-100 hover:shadow-sm transition-all"
+                      key={event.code} 
+                      onClick={() => navigate(`/event/${event.code}`)}
+                      className="px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-[11px] font-black text-slate-700 hover:bg-white hover:border-indigo-100 hover:shadow-sm transition-all flex flex-col items-center min-w-[120px]"
                     >
-                      Code: {code.toUpperCase()}
+                      <span className="truncate w-full text-center">{event.name}</span>
+                      <span className="text-[8px] text-slate-300 uppercase mt-1">{event.code}</span>
                     </button>
                   ))}
                 </div>
@@ -195,22 +224,23 @@ const App: React.FC = () => {
   if (routeMatch.type === 'create') {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center px-6 animate-in">
-        <div className="max-w-md w-full bg-white rounded-[3rem] p-10 shadow-2xl shadow-indigo-100/50 border border-slate-50 space-y-8 text-center">
+        <div className="max-w-md w-full bg-white rounded-[3rem] p-8 sm:p-10 shadow-2xl shadow-indigo-100/50 border border-slate-50 space-y-8 text-center">
           <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-3xl mx-auto shadow-lg"><i className="fa-solid fa-receipt"></i></div>
           <div className="space-y-2">
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Name your squad</h2>
+            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Name your squad</h2>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">What are we splitting today?</p>
           </div>
           <form onSubmit={handleCreate} className="space-y-4">
             <input 
               type="text" 
               autoFocus
+              required
               value={newEventName}
               onChange={e => setNewEventName(e.target.value)}
               placeholder="e.g. Goa Trip 2025"
-              className="w-full px-8 py-5 rounded-3xl bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white text-lg font-bold transition-all outline-none"
+              className="w-full px-8 py-5 rounded-3xl bg-slate-50 border-2 border-transparent focus:border-indigo-600 focus:bg-white text-lg font-bold transition-all outline-none text-center"
             />
-            <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black text-sm uppercase tracking-widest shadow-xl hover:bg-indigo-700 active:scale-95 transition-all">Create Event</button>
+            <button type="submit" className="w-full bg-indigo-600 text-white py-5 rounded-3xl font-black text-xs uppercase tracking-widest shadow-xl hover:bg-indigo-700 active:scale-95 transition-all">Create Event</button>
             <button type="button" onClick={() => navigate('/')} className="w-full py-2 text-[10px] font-black text-slate-300 uppercase">Cancel</button>
           </form>
         </div>
@@ -225,13 +255,13 @@ const App: React.FC = () => {
           <div className="flex items-center gap-2 min-w-0">
             <button onClick={()=>navigate('/')} className="w-9 h-9 rounded-xl hover:bg-slate-50 flex items-center justify-center text-slate-400 shrink-0 transition-colors"><i className="fa-solid fa-arrow-left"></i></button>
             <div className="min-w-0">
-              <h1 className="text-sm font-black truncate uppercase tracking-tight">{activeEvent?.name || 'Loading...'}</h1>
+              <h1 className="text-xs sm:text-sm font-black truncate uppercase tracking-tight">{activeEvent?.name || 'Loading...'}</h1>
               <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{routeMatch.code}</p>
             </div>
           </div>
           <nav className="flex bg-slate-100 p-1 rounded-xl shrink-0">
-            <button onClick={()=>navigate(`/event/${routeMatch.code}`)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${routeMatch.tab==='squad'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>SQUAD</button>
-            <button onClick={()=>navigate(`/event/${routeMatch.code}/settlement`)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${routeMatch.tab==='settlement'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>SETTLEMENT</button>
+            <button onClick={()=>navigate(`/event/${routeMatch.code}`)} className={`px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase transition-all ${routeMatch.tab==='squad'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>SQUAD</button>
+            <button onClick={()=>navigate(`/event/${routeMatch.code}/settlement`)} className={`px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase transition-all ${routeMatch.tab==='settlement'?'bg-white text-indigo-600 shadow-sm':'text-slate-400'}`}>SETTLEMENT</button>
           </nav>
         </div>
       </header>
@@ -245,10 +275,10 @@ const App: React.FC = () => {
         <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-6 space-y-6 animate-in pb-10">
           <div className="bg-white px-6 py-5 rounded-[2rem] border border-slate-100 shadow-xl flex flex-col sm:flex-row justify-between items-center gap-6">
             <div className="flex gap-10 text-center sm:text-left">
-              <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Spent</span><p className="text-2xl font-black">₹{totalSpent.toFixed(0)}</p></div>
-              <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Squad</span><p className="text-2xl font-black">{activeEvent.participants.length}</p></div>
+              <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Spent</span><p className="text-xl sm:text-2xl font-black">₹{totalSpent.toFixed(0)}</p></div>
+              <div><span className="text-[8px] font-black text-slate-300 uppercase block mb-1">Squad</span><p className="text-xl sm:text-2xl font-black">{activeEvent.participants.length}</p></div>
             </div>
-            <button onClick={()=>setShowShareModal(true)} className="w-full sm:w-auto bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-indigo-100 active:scale-95 transition-all">Share with Squad</button>
+            <button onClick={()=>setShowShareModal(true)} className="w-full sm:w-auto bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-100 active:scale-95 transition-all">Share with Squad</button>
           </div>
 
           {routeMatch.tab === 'squad' ? (
@@ -257,7 +287,10 @@ const App: React.FC = () => {
                 <ParticipantManager 
                   participants={activeEvent.participants} 
                   onAdd={handleAddParticipant} 
-                  onRemove={(id) => db.deleteParticipant(id)} 
+                  onRemove={async (id) => {
+                    await db.deleteParticipant(id);
+                    loadData(routeMatch.code);
+                  }} 
                 />
               </div>
               <div className="lg:col-span-4 order-2">
@@ -270,17 +303,23 @@ const App: React.FC = () => {
                 <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
                   <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center lg:text-left">Activity Feed</h3>
                   <div className="space-y-3 max-h-[400px] overflow-y-auto scrollbar-hide">
-                    {activeEvent.expenses.length === 0 ? <div className="text-center py-10 text-slate-200 font-black text-[10px] uppercase">No activity yet</div> : activeEvent.expenses.sort((a,b)=>b.date-a.date).map(e => (
-                      <div key={e.id} onClick={() => setSelectedExpense(e)} className={`p-4 rounded-2xl border transition-all cursor-pointer ${e.category==='Payment'?'bg-green-50/50 border-green-100 italic':'bg-white border-slate-50 hover:border-indigo-100'}`}>
-                        <div className="flex justify-between items-center gap-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="font-black text-slate-800 text-sm truncate">{e.description}</p>
-                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{activeEvent.participants.find(p=>p.id===e.payerId)?.name || 'Member'} paid</p>
+                    {activeEvent.expenses.length === 0 ? (
+                      <div className="text-center py-10 text-slate-200 font-black text-[10px] uppercase">No activity yet</div>
+                    ) : (
+                      activeEvent.expenses.sort((a,b)=>b.date-a.date).map(e => (
+                        <div key={e.id} onClick={() => setSelectedExpense(e)} className={`p-4 rounded-2xl border transition-all cursor-pointer ${e.category==='Payment'?'bg-green-50/50 border-green-100 italic':'bg-white border-slate-50 hover:border-indigo-100'}`}>
+                          <div className="flex justify-between items-center gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-black text-slate-800 text-sm truncate">{e.description}</p>
+                              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
+                                {activeEvent.participants.find(p=>p.id===e.payerId)?.name || 'Member'} paid
+                              </p>
+                            </div>
+                            <p className="font-black text-slate-900 text-sm whitespace-nowrap">₹{Number(e.amount).toFixed(0)}</p>
                           </div>
-                          <p className="font-black text-slate-900 text-sm">₹{Number(e.amount).toFixed(0)}</p>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -291,7 +330,17 @@ const App: React.FC = () => {
               balances={balances} 
               settlements={settlements} 
               totalSpent={totalSpent} 
-              onSettle={(f, t, a) => db.addExpense(activeEvent.id, { description: `Settlement Record`, amount: a, payerId: f, participantIds: [t], category: 'Payment', date: Date.now() })}
+              onSettle={async (f, t, a) => {
+                await db.addExpense(activeEvent.id, { 
+                  description: `Settlement Record`, 
+                  amount: a, 
+                  payerId: f, 
+                  participantIds: [t], 
+                  category: 'Payment', 
+                  date: Date.now() 
+                });
+                loadData(routeMatch.code);
+              }}
             />
           )}
         </main>
@@ -329,7 +378,7 @@ const App: React.FC = () => {
               <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-300 uppercase">Label</span><span className="font-bold text-sm truncate max-w-[150px] text-right">{selectedExpense.description}</span></div>
               <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-300 uppercase">Amount</span><span className="font-black text-indigo-600 text-xl">₹{Number(selectedExpense.amount).toFixed(0)}</span></div>
             </div>
-            <button onClick={() => db.deleteExpense(selectedExpense.id).then(() => setSelectedExpense(null))} className="w-full py-4 bg-red-50 text-red-500 font-black text-[11px] uppercase rounded-2xl border border-red-100 transition-all hover:bg-red-100">
+            <button onClick={() => db.deleteExpense(selectedExpense.id).then(() => { setSelectedExpense(null); loadData(routeMatch.code); })} className="w-full py-4 bg-red-50 text-red-500 font-black text-[11px] uppercase rounded-2xl border border-red-100 transition-all hover:bg-red-100">
               <i className="fa-solid fa-trash-can mr-2"></i>Delete Record
             </button>
           </div>

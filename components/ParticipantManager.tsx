@@ -15,12 +15,15 @@ const ParticipantManager: React.FC<Props> = ({ participants, onAdd, onRemove }) 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim() && !isAdding) {
+    const trimmedName = name.trim();
+    if (trimmedName && !isAdding) {
       setIsAdding(true);
       try {
-        await onAdd(name.trim(), upiId.trim() || undefined);
+        await onAdd(trimmedName, upiId.trim() || undefined);
         setName('');
         setUpiId('');
+      } catch (err) {
+        console.error("Submit error:", err);
       } finally {
         setIsAdding(false);
       }
@@ -31,7 +34,7 @@ const ParticipantManager: React.FC<Props> = ({ participants, onAdd, onRemove }) 
     <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
       <div className="flex items-center gap-2 text-[#1e293b] mb-6 justify-center lg:justify-start">
         <i className="fa-solid fa-users text-[#4f46e5]"></i>
-        <h2 className="text-lg font-bold">The Squad</h2>
+        <h2 className="text-lg font-bold tracking-tight">The Squad</h2>
       </div>
       
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -43,7 +46,7 @@ const ParticipantManager: React.FC<Props> = ({ participants, onAdd, onRemove }) 
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Rahul, Priya"
-            className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-medium focus:outline-none focus:border-[#4f46e5] focus:bg-white transition-all placeholder:text-slate-300"
+            className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-bold focus:outline-none focus:border-[#4f46e5] focus:bg-white transition-all placeholder:text-slate-300"
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -53,15 +56,15 @@ const ParticipantManager: React.FC<Props> = ({ participants, onAdd, onRemove }) 
             value={upiId}
             onChange={(e) => setUpiId(e.target.value)}
             placeholder="e.g. rahul@okaxis"
-            className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-medium focus:outline-none focus:border-[#4f46e5] focus:bg-white transition-all placeholder:text-slate-300"
+            className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-bold focus:outline-none focus:border-[#4f46e5] focus:bg-white transition-all placeholder:text-slate-300"
           />
         </div>
         <button
           type="submit"
-          disabled={isAdding}
-          className="w-full bg-[#4f46e5] text-white px-5 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.15em] hover:bg-[#4338ca] transition-all shadow-md active:scale-95 disabled:opacity-50"
+          disabled={isAdding || !name.trim()}
+          className="w-full bg-[#4f46e5] text-white px-5 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.15em] hover:bg-[#4338ca] transition-all shadow-md active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
         >
-          {isAdding ? <i className="fa-solid fa-spinner animate-spin"></i> : "Add to Squad"}
+          {isAdding ? <><i className="fa-solid fa-spinner animate-spin"></i> ADDIING...</> : "Add to Squad"}
         </button>
       </form>
 
@@ -76,7 +79,7 @@ const ParticipantManager: React.FC<Props> = ({ participants, onAdd, onRemove }) 
               <div className="flex items-center gap-3 min-w-0">
                 <img src={p.avatar} alt={p.name} className="w-9 h-9 rounded-xl bg-slate-100 shadow-sm shrink-0" />
                 <div className="min-w-0">
-                  <p className="font-black text-sm text-[#1e293b] truncate leading-tight">{p.name}</p>
+                  <p className="font-black text-sm text-[#1e293b] truncate leading-tight uppercase tracking-tight">{p.name}</p>
                   {p.upiId && <p className="text-[9px] text-slate-400 font-bold truncate tracking-tight">{p.upiId}</p>}
                 </div>
               </div>
