@@ -6,19 +6,6 @@ import ParticipantManager from './components/ParticipantManager.tsx';
 import ExpenseForm from './components/ExpenseForm.tsx';
 import SettlementView from './components/SettlementView.tsx';
 import { calculateBalances, calculateSettlements } from './utils/calculation.ts';
-import { 
-  ResponsiveContainer, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Cell, 
-  PieChart, 
-  Pie, 
-  Legend 
-} from 'recharts';
 
 const App: React.FC = () => {
   const [events, setEvents] = useState<Record<string, SplitEvent>>({});
@@ -28,7 +15,7 @@ const App: React.FC = () => {
   // App states scoped to the active event
   const [activeTab, setActiveTab] = useState<'expenses' | 'settlement'>('expenses');
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
-  const [shareStatus, setShareStatus] = useState<'idle' | 'loading' | 'copied'>('idle');
+  const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle');
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareEventId, setShareEventId] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -45,7 +32,7 @@ const App: React.FC = () => {
       const savedEvents = localStorage.getItem('splitit_multi_events');
       let currentEvents: Record<string, SplitEvent> = savedEvents ? JSON.parse(savedEvents) : {};
 
-      // Handle shared hash
+      // Handle shared hash (the unique ID part of the URL)
       const hash = window.location.hash.substring(1);
       if (hash) {
         try {
@@ -58,7 +45,6 @@ const App: React.FC = () => {
                 id: sharedId,
                 name: parsed.n || 'Shared Event',
                 participants: parsed.p.map((p: any, idx: number) => {
-                  // Handle legacy string array or new object array
                   const name = typeof p === 'string' ? p : p.n;
                   const upi = typeof p === 'string' ? undefined : p.u;
                   return {
@@ -81,7 +67,7 @@ const App: React.FC = () => {
               };
               currentEvents[sharedId] = reconstructed;
               setCurrentEventId(sharedId);
-              // Clean URL
+              // Clean URL to prevent re-adding on refresh
               window.history.replaceState(null, "", window.location.pathname);
             }
           }
@@ -107,33 +93,17 @@ const App: React.FC = () => {
   const activeEvent = currentEventId ? events[currentEventId] : null;
 
   // Derived data for active event
-  const { balances, settlements, totalSpent, categoryData, memberSpendingData } = useMemo(() => {
-    if (!activeEvent) return { balances: [], settlements: [], totalSpent: 0, categoryData: [], memberSpendingData: [] };
+  const { balances, settlements, totalSpent } = useMemo(() => {
+    if (!activeEvent) return { balances: [], settlements: [], totalSpent: 0 };
     
     const bals = calculateBalances(activeEvent.participants, activeEvent.expenses);
     const setts = calculateSettlements([...bals]);
     const total = activeEvent.expenses.reduce((acc, curr) => curr.category !== 'Payment' ? acc + curr.amount : acc, 0);
 
-    const counts: Record<string, number> = {};
-    activeEvent.expenses.filter(e => e.category !== 'Payment').forEach(e => {
-      counts[e.category] = (counts[e.category] || 0) + e.amount;
-    });
-    const catData = Object.entries(counts).map(([name, value]) => ({ name, value }));
-
-    const spending: Record<string, number> = {};
-    activeEvent.participants.forEach(p => spending[p.name] = 0);
-    activeEvent.expenses.filter(e => e.category !== 'Payment').forEach(e => {
-      const p = activeEvent.participants.find(part => part.id === e.payerId);
-      if (p) spending[p.name] += e.amount;
-    });
-    const memData = Object.entries(spending).map(([name, value]) => ({ name, value }));
-
     return { 
       balances: bals, 
       settlements: setts, 
-      totalSpent: total, 
-      categoryData: catData, 
-      memberSpendingData: memData 
+      totalSpent: total
     };
   }, [activeEvent]);
 
@@ -211,8 +181,8 @@ const App: React.FC = () => {
     });
   };
 
-  // Sharing Helpers
-  const getFullShareUrl = (eventId: string) => {
+  // Updated Sharing logic as per user request: splitits.in/[unique_id]
+  const getShareUrl = (eventId: string) => {
     const targetEvent = events[eventId];
     const pMap = new Map();
     targetEvent.participants.forEach((p, idx) => pMap.set(p.id, idx));
@@ -231,24 +201,8 @@ const App: React.FC = () => {
     };
     
     const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(payload));
-    return `${window.location.origin}${window.location.pathname}#${compressed}`;
-  };
-
-  const getShortUrl = async (eventId: string) => {
-    const longUrl = getFullShareUrl(eventId);
-    try {
-      setShareStatus('loading');
-      const res = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
-      if (res.ok) {
-        const short = await res.text();
-        setShareStatus('idle');
-        return short;
-      }
-    } catch (e) {
-      console.warn("Shortening failed", e);
-    }
-    setShareStatus('idle');
-    return longUrl;
+    // The "Unique ID" is the compressed payload. Using hash to ensure the client-side app can load it.
+    return `https://splitits.in/#${compressed}`;
   };
 
   const openShareModal = (e: React.MouseEvent, id: string) => {
@@ -257,9 +211,9 @@ const App: React.FC = () => {
     setShowShareModal(true);
   };
 
-  const handleShareWhatsApp = async () => {
+  const handleShareWhatsApp = () => {
     if (!shareEventId) return;
-    const url = await getShortUrl(shareEventId);
+    const url = getShareUrl(shareEventId);
     const ev = events[shareEventId];
     const bals = calculateBalances(ev.participants, ev.expenses);
     const setts = calculateSettlements([...bals]);
@@ -268,16 +222,14 @@ const App: React.FC = () => {
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  const handleCopyLink = async () => {
+  const handleCopyLink = () => {
     if (!shareEventId) return;
-    const url = await getShortUrl(shareEventId);
+    const url = getShareUrl(shareEventId);
     navigator.clipboard.writeText(url).then(() => {
       setShareStatus('copied');
       setTimeout(() => setShareStatus('idle'), 2000);
     });
   };
-
-  const COLORS = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
   // Dashboard Render
   if (!currentEventId) {
@@ -392,7 +344,6 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        {/* Quick Summary Row */}
         <div className="flex items-center justify-between bg-white px-6 py-4 rounded-3xl border border-slate-100 shadow-sm">
           <div className="flex gap-8">
             <div><span className="text-[8px] font-bold text-slate-400 uppercase block mb-1">Total Spent</span><p className="text-lg font-black">₹{totalSpent.toFixed(0)}</p></div>
@@ -428,17 +379,15 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Shared Modals */}
       {showShareModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="p-8 border-b border-slate-100 flex justify-between items-center"><h3 className="text-xl font-bold text-slate-800">Share "{events[shareEventId!]?.name}"</h3><button onClick={() => setShowShareModal(false)} className="text-slate-400 hover:text-slate-600"><i className="fa-solid fa-xmark text-lg"></i></button></div>
             <div className="p-8 grid grid-cols-2 gap-4 relative">
-              {shareStatus === 'loading' && <div className="absolute inset-0 bg-white/80 z-10 flex flex-col items-center justify-center gap-2"><i className="fa-solid fa-spinner animate-spin text-[#4f46e5] text-2xl"></i><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Processing...</span></div>}
               <button onClick={handleShareWhatsApp} className="flex flex-col items-center gap-2 p-6 rounded-3xl bg-green-50 hover:bg-green-100 transition-colors"><div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center text-white"><i className="fa-brands fa-whatsapp text-2xl"></i></div><span className="text-xs font-bold text-green-700">WhatsApp</span></button>
               <button onClick={handleCopyLink} className={`flex flex-col items-center gap-2 p-6 rounded-3xl transition-colors ${shareStatus === 'copied' ? 'bg-indigo-100' : 'bg-slate-50'}`}><div className={`w-12 h-12 rounded-full flex items-center justify-center text-white ${shareStatus === 'copied' ? 'bg-indigo-600' : 'bg-slate-700'}`}><i className={`fa-solid ${shareStatus === 'copied' ? 'fa-check' : 'fa-link'} text-xl`}></i></div><span className="text-xs font-bold text-slate-700">{shareStatus === 'copied' ? 'Copied!' : 'Copy Link'}</span></button>
             </div>
-            <div className="p-6 bg-slate-50 rounded-b-[2.5rem] text-center"><p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Data remains synced offline</p></div>
+            <div className="p-6 bg-slate-50 rounded-b-[2.5rem] text-center"><p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Shared via splitits.in</p></div>
           </div>
         </div>
       )}
