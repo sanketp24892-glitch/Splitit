@@ -8,7 +8,7 @@ interface Props {
   settlements: Settlement[];
   expenses: Expense[];
   totalSpent: number;
-  onSettle: (fromId: string, toId: string, amount: number, description: string, proof?: string) => void;
+  onSettle: (fromId: string, toId: string, amount: number, description: string, proof?: string) => Promise<void>;
 }
 
 const SettlementView: React.FC<Props> = ({ participants, balances, settlements, expenses, totalSpent, onSettle }) => {
@@ -17,6 +17,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [showUpiInput, setShowUpiInput] = useState(false);
   const [manualUpi, setManualUpi] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getParticipant = (id: string) => participants.find(p => p.id === id);
@@ -38,21 +39,27 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
-  const openUpiApp = () => {
-    if (!paymentModal) return;
+  const openUpiApp = async () => {
+    if (!paymentModal || isProcessing) return;
     const payee = getParticipant(paymentModal.settlement.to);
     const upi = manualUpi || payee?.upiId;
     if (!upi) {
       setShowUpiInput(true);
       return;
     }
-    const link = `upi://pay?pa=${upi}&pn=${encodeURIComponent(payee?.name || 'User')}&am=${paymentModal.settlement.amount.toFixed(2)}&cu=INR`;
     
-    // Record as online settlement
-    onSettle(paymentModal.settlement.from, paymentModal.settlement.to, paymentModal.settlement.amount, "Online Payment");
-    
-    setPaymentModal(null);
-    window.location.href = link;
+    setIsProcessing(true);
+    try {
+      // Record as online settlement
+      await onSettle(paymentModal.settlement.from, paymentModal.settlement.to, paymentModal.settlement.amount, "Online Payment");
+      const link = `upi://pay?pa=${upi}&pn=${encodeURIComponent(payee?.name || 'User')}&am=${paymentModal.settlement.amount.toFixed(2)}&cu=INR`;
+      setPaymentModal(null);
+      window.location.href = link;
+    } catch (err) {
+      console.error("Online settlement error:", err);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -66,11 +73,19 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
     }
   };
 
-  const confirmManualSettle = () => {
-    if (manualConfirmModal && screenshot) {
-      onSettle(manualConfirmModal.from, manualConfirmModal.to, manualConfirmModal.amount, "Manual Settlement", screenshot);
-      setManualConfirmModal(null);
-      setScreenshot(null);
+  const confirmManualSettle = async () => {
+    if (manualConfirmModal && screenshot && !isProcessing) {
+      setIsProcessing(true);
+      try {
+        await onSettle(manualConfirmModal.from, manualConfirmModal.to, manualConfirmModal.amount, "Manual Settlement", screenshot);
+        setManualConfirmModal(null);
+        setScreenshot(null);
+      } catch (err) {
+        console.error("Manual settlement error:", err);
+        alert("Failed to record settlement. The image might be too large.");
+      } finally {
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -154,9 +169,11 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                 {screenshot ? (
                   <div className="relative group mx-auto w-32 h-32 rounded-2xl overflow-hidden border-2 border-indigo-600 shadow-md">
                     <img src={screenshot} className="w-full h-full object-cover" />
-                    <button onClick={() => fileInputRef.current?.click()} className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <i className="fa-solid fa-camera text-white"></i>
-                    </button>
+                    {!isProcessing && (
+                      <button onClick={() => fileInputRef.current?.click()} className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <i className="fa-solid fa-camera text-white"></i>
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <button onClick={() => fileInputRef.current?.click()} className="w-full py-10 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center gap-2 hover:bg-slate-100 transition-all">
@@ -167,13 +184,13 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => {setManualConfirmModal(null); setScreenshot(null);}} className="py-4 bg-slate-100 text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest">Cancel</button>
+                <button disabled={isProcessing} onClick={() => {setManualConfirmModal(null); setScreenshot(null);}} className="py-4 bg-slate-100 text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50">Cancel</button>
                 <button 
-                  disabled={!screenshot}
+                  disabled={!screenshot || isProcessing}
                   onClick={confirmManualSettle} 
                   className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${screenshot ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 text-slate-300 border border-slate-100'}`}
                 >
-                  Confirm
+                  {isProcessing ? <i className="fa-solid fa-spinner animate-spin"></i> : "Confirm"}
                 </button>
               </div>
             </div>
@@ -260,7 +277,10 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                       <div className="flex items-center gap-2">
                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{h.description}</span>
                         {h.proofUrl && (
-                          <button onClick={() => window.open(h.proofUrl, '_blank')} className="text-[8px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md hover:bg-indigo-100">
+                          <button onClick={() => {
+                            const w = window.open();
+                            if (w) w.document.write(`<img src="${h.proofUrl}" style="max-width:100%; height:auto;" />`);
+                          }} className="text-[8px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md hover:bg-indigo-100">
                              <i className="fa-solid fa-paperclip mr-1"></i>VIEW PROOF
                           </button>
                         )}
@@ -268,7 +288,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                    </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-black text-slate-900">₹{h.amount.toFixed(0)}</p>
+                  <p className="text-sm font-black text-slate-900">₹{Number(h.amount).toFixed(0)}</p>
                   <p className="text-[8px] font-bold text-slate-300 uppercase">{new Date(h.date).toLocaleDateString()}</p>
                 </div>
               </div>
@@ -298,15 +318,15 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
             <div className="p-8 space-y-3">
               {!showUpiInput ? (
                 <div className="grid grid-cols-2 gap-3">
-                  <button onClick={openUpiApp} className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-50 rounded-2xl border border-slate-100 active:scale-95 transition-all hover:bg-slate-100">
+                  <button disabled={isProcessing} onClick={openUpiApp} className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-50 rounded-2xl border border-slate-100 active:scale-95 transition-all hover:bg-slate-100 disabled:opacity-50">
                     <div className="text-3xl text-slate-900"><i className="fa-brands fa-google-pay"></i></div>
                     <span className="text-[9px] font-black uppercase text-slate-500">Google Pay</span>
                   </button>
-                  <button onClick={openUpiApp} className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-50 rounded-2xl border border-slate-100 active:scale-95 transition-all hover:bg-slate-100">
+                  <button disabled={isProcessing} onClick={openUpiApp} className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-50 rounded-2xl border border-slate-100 active:scale-95 transition-all hover:bg-slate-100 disabled:opacity-50">
                     <div className="text-3xl text-purple-600"><i className="fa-solid fa-mobile-screen-button"></i></div>
                     <span className="text-[9px] font-black uppercase text-slate-500">PhonePe</span>
                   </button>
-                  <button onClick={() => setShowUpiInput(true)} className="col-span-2 flex items-center justify-center gap-3 py-5 bg-indigo-50 rounded-2xl border border-indigo-100 active:scale-95 transition-all">
+                  <button disabled={isProcessing} onClick={() => setShowUpiInput(true)} className="col-span-2 flex items-center justify-center gap-3 py-5 bg-indigo-50 rounded-2xl border border-indigo-100 active:scale-95 transition-all disabled:opacity-50">
                     <div className="text-xl text-indigo-600"><i className="fa-solid fa-at"></i></div>
                     <span className="text-[10px] font-black uppercase text-indigo-600">Custom UPI ID</span>
                   </button>
@@ -318,12 +338,14 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                     <input type="text" autoFocus value={manualUpi} onChange={e => setManualUpi(e.target.value)} placeholder="username@upi" className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-bold outline-none" />
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => setShowUpiInput(false)} className="flex-1 py-5 bg-slate-100 rounded-2xl font-black text-[10px] uppercase tracking-widest">Back</button>
-                    <button onClick={openUpiApp} className="flex-[2] py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg">Proceed</button>
+                    <button disabled={isProcessing} onClick={() => setShowUpiInput(false)} className="flex-1 py-5 bg-slate-100 rounded-2xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50">Back</button>
+                    <button disabled={isProcessing} onClick={openUpiApp} className="flex-[2] py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg disabled:opacity-50">
+                      {isProcessing ? <i className="fa-solid fa-spinner animate-spin"></i> : "Proceed"}
+                    </button>
                   </div>
                 </div>
               )}
-              <button onClick={() => setPaymentModal(null)} className="w-full pt-6 text-[10px] font-black text-slate-300 uppercase tracking-widest text-center hover:text-slate-500 transition-colors">Close Window</button>
+              <button disabled={isProcessing} onClick={() => setPaymentModal(null)} className="w-full pt-6 text-[10px] font-black text-slate-300 uppercase tracking-widest text-center hover:text-slate-500 transition-colors disabled:opacity-50">Close Window</button>
             </div>
           </div>
         </div>

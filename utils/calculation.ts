@@ -6,20 +6,21 @@ export const calculateBalances = (participants: Participant[], expenses: Expense
   participants.forEach(p => balances[p.id] = 0);
 
   expenses.forEach(expense => {
+    const amount = Number(expense.amount) || 0;
     if (expense.category === 'Payment') {
       // Settlement: payerId is the sender (debtor), participantIds[0] is the receiver (creditor)
       // Payer balance increases (becomes less negative)
-      balances[expense.payerId] += expense.amount;
+      balances[expense.payerId] += amount;
       // Recipient balance decreases (becomes less positive)
       expense.participantIds.forEach(pId => {
-        balances[pId] -= expense.amount;
+        balances[pId] -= amount;
       });
     } else {
       // Regular expense: split amount among all participants
-      const splitAmount = expense.amount / expense.participantIds.length;
+      const splitAmount = amount / expense.participantIds.length;
       
       // Payer gets back their total minus their share
-      balances[expense.payerId] += expense.amount;
+      balances[expense.payerId] += amount;
 
       // Each participant owes their share
       expense.participantIds.forEach(pId => {
