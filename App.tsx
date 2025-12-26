@@ -36,6 +36,7 @@ const App: React.FC = () => {
   const [newEventName, setNewEventName] = useState('');
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle');
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showAppShareModal, setShowAppShareModal] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
@@ -165,16 +166,25 @@ const App: React.FC = () => {
     }
   };
 
-  const handleShare = (type: 'whatsapp' | 'sms' | 'copy') => {
-    const url = window.location.origin + `/event/${routeMatch.code}`;
-    const text = `Join my event *${activeEvent?.name}* on Splitit: ${url}\n\nLess maths. More memories.\nTry Splitit → www.splitits.in`;
+  const handleShare = (type: 'whatsapp' | 'sms' | 'copy' | 'gmail', isAppShare?: boolean) => {
+    let text = '';
+    if (isAppShare) {
+      text = `Found a simple way to split and settle expenses very easily — no apps to install, no Excel sheets.\n\nYou can split and settle expenses very easily, track payments in real time, and avoid confusion later\n\nJust open the link and update\n\nTry it now: *www.splitits.in*\n\n_Less maths. More memories_`;
+    } else {
+      const url = window.location.origin + `/event/${routeMatch.code}`;
+      text = `Join my event *${activeEvent?.name}* on Splitit: ${url}\n\nLess maths. More memories.\nTry Splitit → www.splitits.in`;
+    }
     
     if (type === 'whatsapp') {
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
     } else if (type === 'sms') {
       window.open(`sms:?body=${encodeURIComponent(text)}`, '_blank');
+    } else if (type === 'gmail') {
+      const subject = isAppShare ? "Found a simple way to split expenses" : `Expense details for ${activeEvent?.name}`;
+      const plainText = text.replace(/\*/g, '').replace(/_/g, '');
+      window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainText)}`, '_blank');
     } else {
-      navigator.clipboard.writeText(text);
+      navigator.clipboard.writeText(text.replace(/\*/g, '').replace(/_/g, ''));
       setShareStatus('copied');
       setTimeout(() => setShareStatus('idle'), 2000);
     }
@@ -234,11 +244,19 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
+
+            <button 
+              onClick={() => setShowAppShareModal(true)}
+              className="mt-2 px-6 py-3 border border-slate-200 rounded-2xl font-black text-[11px] uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all flex items-center gap-2 active:scale-95"
+            >
+              <i className="fa-solid fa-share-nodes"></i>
+              Share with friends
+            </button>
           </div>
         </main>
 
         <footer className="w-full p-8 text-center space-y-1">
-          <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight">
+          <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight italic">
             Less maths. More memories.
           </p>
           <p className="text-[10px] font-black text-[#4f46e5] uppercase tracking-widest">
@@ -273,7 +291,7 @@ const App: React.FC = () => {
           </form>
         </div>
         <div className="mt-8 text-center space-y-1">
-          <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight">
+          <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight italic">
             Less maths. More memories.
           </p>
           <p className="text-[10px] font-black text-[#4f46e5] uppercase tracking-widest">
@@ -414,7 +432,7 @@ const App: React.FC = () => {
                 </div>
                 
                 <div className="pt-8 text-center space-y-1">
-                  <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight">
+                  <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight italic">
                     Less maths. More memories.
                   </p>
                   <p className="text-[10px] font-black text-[#4f46e5] uppercase tracking-widest">
@@ -481,6 +499,33 @@ const App: React.FC = () => {
             </div>
             
             <button onClick={() => setShowShareModal(false)} className="w-full py-2 text-[10px] font-black text-slate-300 uppercase">Close</button>
+          </div>
+        </div>
+      )}
+
+      {showAppShareModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in">
+          <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl p-8 text-center space-y-6">
+            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl mx-auto shadow-lg"><i className="fa-solid fa-share-nodes"></i></div>
+            <h3 className="text-xl font-black">Share SplitIt</h3>
+            <p className="text-xs text-slate-500 font-medium leading-relaxed">Help your friends stop doing awkward math too!</p>
+            
+            <div className="grid grid-cols-1 gap-3">
+              <button onClick={() => handleShare('whatsapp', true)} className="w-full flex items-center justify-center gap-3 py-4 bg-green-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">
+                <i className="fa-brands fa-whatsapp text-lg"></i> WhatsApp
+              </button>
+              <button onClick={() => handleShare('gmail', true)} className="w-full flex items-center justify-center gap-3 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">
+                <i className="fa-solid fa-envelope text-lg"></i> Gmail
+              </button>
+              <button onClick={() => handleShare('sms', true)} className="w-full flex items-center justify-center gap-3 py-4 bg-indigo-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">
+                <i className="fa-solid fa-comment-sms text-lg"></i> Text Message
+              </button>
+              <button onClick={() => handleShare('copy', true)} className={`w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${shareStatus==='copied' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-900'}`}>
+                {shareStatus==='copied' ? <><i className="fa-solid fa-check"></i> Copied</> : <><i className="fa-solid fa-link"></i> Copy Link</>}
+              </button>
+            </div>
+            
+            <button onClick={() => setShowAppShareModal(false)} className="w-full py-2 text-[10px] font-black text-slate-300 uppercase">Close</button>
           </div>
         </div>
       )}
