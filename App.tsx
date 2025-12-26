@@ -358,7 +358,6 @@ const App: React.FC = () => {
                   />
                 </div>
                 
-                {/* Footer added to bottom of Overview tab content */}
                 <div className="pt-8 text-center space-y-1">
                   <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight">
                     Less maths. More memories.
@@ -377,16 +376,22 @@ const App: React.FC = () => {
               expenses={activeEvent.expenses}
               totalSpent={totalSpent} 
               onSettle={async (f, t, a, desc, proof) => {
-                await db.addExpense(activeEvent.id, { 
-                  description: desc, 
-                  amount: a, 
-                  payerId: f, 
-                  participantIds: [t], 
-                  category: 'Payment', 
-                  date: Date.now(),
-                  proofUrl: proof
-                });
-                loadData(routeMatch.code);
+                if (!activeEvent) return;
+                try {
+                  await db.addExpense(activeEvent.id, { 
+                    description: desc, 
+                    amount: Number(a), 
+                    payerId: f, 
+                    participantIds: [t], 
+                    category: 'Payment', 
+                    date: Date.now(),
+                    proofUrl: proof
+                  });
+                  await loadData(routeMatch.code);
+                } catch (err) {
+                  console.error("OnSettle Error:", err);
+                  throw err;
+                }
               }}
             />
           )}

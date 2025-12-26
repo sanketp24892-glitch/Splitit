@@ -15,14 +15,13 @@ export const createEvent = async (name: string, shortCode: string): Promise<stri
   const { data, error } = await supabase
     .from('events')
     .insert([{ name, short_code: shortCode }])
-    .select()
-    .single();
+    .select();
 
   if (error) {
     console.error("Supabase Create Event Error:", error);
     throw error;
   }
-  return data.id;
+  return data?.[0]?.id;
 };
 
 /**
@@ -85,16 +84,19 @@ export const addParticipant = async (eventId: string, p: Omit<Participant, 'id'>
       upi_id: p.upiId || null, // Explicit mapping to database column upi_id
       event_id: eventId 
     }])
-    .select()
-    .single();
+    .select();
   
   if (error) {
     console.error("Add Participant Error:", error);
     throw error;
   }
+  
+  const result = data?.[0];
+  if (!result) throw new Error("No data returned from insert");
+
   return {
-    ...data,
-    upiId: data.upi_id // Return mapped for UI
+    ...result,
+    upiId: result.upi_id // Return mapped for UI
   };
 };
 
@@ -133,21 +135,21 @@ export const addExpense = async (eventId: string, e: Omit<Expense, 'id'>) => {
     .from('expenses')
     .insert([{
       event_id: eventId,
-      description: e.description,
-      amount: e.amount,
+      description: e.description || "Expense",
+      amount: Number(e.amount) || 0,
       payer_id: e.payerId,
-      participant_ids: e.participantIds,
-      category: e.category,
+      // Fix: Changed e.participant_ids to e.participantIds to match the Expense type definition.
+      participant_ids: e.participantIds || [],
+      category: e.category || 'Other',
       proof_url: e.proofUrl || null
     }])
-    .select()
-    .single();
+    .select();
 
   if (error) {
     console.error("Add Expense Error:", error);
     throw error;
   }
-  return data;
+  return data?.[0] || null;
 };
 
 /**
