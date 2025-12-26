@@ -220,52 +220,31 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         </div>
       )}
 
-      {/* Summary Report Section */}
-      <div className="bg-slate-900 text-white rounded-[2.5rem] p-8 sm:p-10 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full -mr-10 -mt-10 blur-3xl"></div>
-        <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-500/10 rounded-full -ml-10 -mb-10 blur-3xl"></div>
-        
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10">
-            <i className="fa-solid fa-file-invoice text-indigo-400"></i>
-          </div>
-          <div>
-            <h2 className="text-lg font-black tracking-tight">Summary Report</h2>
-            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-[0.2em]">Final Payables</p>
-          </div>
+      {/* Simplified Summary Report Section */}
+      <div className="bg-white border border-slate-100 rounded-[2.5rem] p-8 sm:p-10 shadow-sm space-y-6">
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-black tracking-tight uppercase">Summary Report</h2>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4">
           {settlements.length === 0 ? (
-            <div className="text-center py-6 border border-white/5 rounded-3xl bg-white/[0.02]">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Nothing to report. Everyone is even.</p>
-            </div>
+            <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest text-center py-4">No pending debts.</p>
           ) : (
             <div className="space-y-3">
               {settlements.map((s, i) => (
-                <div key={i} className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/5 rounded-2xl group transition-all hover:bg-white/[0.05]">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-xs font-black text-indigo-400 border border-indigo-500/20">
-                      {i + 1}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-black uppercase tracking-tight truncate leading-none mb-1">
-                        <span className="text-indigo-400">{getParticipantName(s.from)}</span> pay <span className="text-indigo-400">{getParticipantName(s.to)}</span>
-                      </p>
-                      <p className="text-[9px] font-bold text-slate-500 uppercase">Clearance Required</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-lg font-black tracking-tighter">₹{s.amount.toFixed(0)}</p>
-                  </div>
+                <div key={i} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0">
+                  <p className="text-xs font-bold text-slate-600 uppercase tracking-tight">
+                    <span className="text-slate-900">{getParticipantName(s.from)}</span> pays <span className="text-slate-900">{getParticipantName(s.to)}</span>
+                  </p>
+                  <p className="text-sm font-black text-slate-900">₹{s.amount.toFixed(0)}</p>
                 </div>
               ))}
             </div>
           )}
 
-          <div className="pt-6 border-t border-white/10 flex justify-between items-center">
-            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Outstanding</span>
-            <span className="text-2xl font-black text-indigo-400 tracking-tighter">₹{settlements.reduce((acc, curr) => acc + curr.amount, 0).toFixed(0)}</span>
+          <div className="pt-4 flex justify-between items-center border-t border-slate-100">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Outstanding</span>
+            <span className="text-xl font-black text-indigo-600 tracking-tighter">₹{settlements.reduce((acc, curr) => acc + curr.amount, 0).toFixed(0)}</span>
           </div>
         </div>
       </div>
