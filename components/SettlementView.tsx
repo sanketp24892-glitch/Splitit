@@ -40,8 +40,8 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
-  const openUpiApp = async () => {
-    if (!paymentModal || isProcessing) return;
+  const openUpiApp = () => {
+    if (!paymentModal) return;
     const payee = getParticipant(paymentModal.settlement.to);
     const upi = manualUpi || payee?.upiId;
     if (!upi) {
@@ -49,17 +49,9 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
       return;
     }
     
-    setIsProcessing(true);
-    try {
-      await onSettle(paymentModal.settlement.from, paymentModal.settlement.to, paymentModal.settlement.amount, "Online Payment");
-      const link = `upi://pay?pa=${upi}&pn=${encodeURIComponent(payee?.name || 'User')}&am=${paymentModal.settlement.amount.toFixed(2)}&cu=INR`;
-      setPaymentModal(null);
-      window.location.href = link;
-    } catch (err) {
-      console.error("Online settlement error:", err);
-    } finally {
-      setIsProcessing(false);
-    }
+    const link = `upi://pay?pa=${upi}&pn=${encodeURIComponent(payee?.name || 'User')}&am=${paymentModal.settlement.amount.toFixed(2)}&cu=INR`;
+    setPaymentModal(null);
+    window.location.href = link;
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,7 +95,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
   };
 
   return (
-    <div className="space-y-8 animate-in pb-20 max-w-4xl mx-auto">
+    <div className="space-y-8 animate-in pb-20 max-w-4xl mx-auto px-2 sm:px-0">
       <div className="space-y-4">
         <div className="flex items-center gap-3 mb-6 px-2">
           <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-sm">
@@ -129,46 +121,49 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
               const payer = getParticipant(s.from);
               const receiver = getParticipant(s.to);
               return (
-                <div key={idx} className="bg-white rounded-[2rem] p-5 border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col relative overflow-hidden">
+                <div key={idx} className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col relative overflow-hidden group">
                   <div className="flex justify-between items-start mb-6">
                     <div className="space-y-3 flex-1 min-w-0 pr-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 bg-slate-50 rounded-lg flex items-center justify-center text-[9px] text-slate-400 font-black uppercase shrink-0">From</div>
-                        <p className="text-[11px] font-black text-slate-900 uppercase truncate">{payer?.name}</p>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-slate-100 rounded-xl flex items-center justify-center text-[8px] text-slate-500 font-black uppercase shrink-0">Sender</div>
+                        <p className="text-sm font-black text-slate-900 uppercase truncate tracking-tight">{payer?.name}</p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center text-[9px] font-black uppercase shrink-0">To</div>
-                        <p className="text-[11px] font-black text-indigo-600 uppercase truncate">{receiver?.name}</p>
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center text-[8px] font-black uppercase shrink-0">Receiver</div>
+                        <p className="text-sm font-black text-indigo-600 uppercase truncate tracking-tight">{receiver?.name}</p>
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-0.5">Owes</p>
-                      <h3 className="text-2xl font-black text-slate-900 tracking-tighter">₹{s.amount.toFixed(0)}</h3>
+                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-0.5">Total Amount</p>
+                      <h3 className="text-3xl font-black text-slate-900 tracking-tighter">₹{s.amount.toFixed(0)}</h3>
                     </div>
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => {setPaymentModal({settlement: s, show: true}); setShowUpiInput(false);}} 
+                        className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-indigo-100/50 flex items-center justify-center gap-2"
+                      >
+                        <i className="fa-solid fa-bolt-lightning"></i>
+                        Pay Now
+                      </button>
+                      <button 
+                        onClick={() => handleWhatsAppReminder(s)} 
+                        className="flex-1 bg-green-50 text-green-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-green-100 active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <i className="fa-brands fa-whatsapp text-lg"></i>
+                        Request
+                      </button>
+                    </div>
                     <button 
-                      onClick={() => {setPaymentModal({settlement: s, show: true}); setShowUpiInput(false);}} 
-                      className="flex-[2] bg-indigo-600 text-white py-4 rounded-2xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-indigo-100 flex items-center justify-center gap-2"
+                      onClick={() => {setManualConfirmModal(s); setManualComment(''); setScreenshot(null);}} 
+                      className="w-full bg-slate-50 text-slate-900 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-slate-100 hover:bg-slate-100 active:scale-95 transition-all flex items-center justify-center gap-2"
                     >
-                      <i className="fa-solid fa-paper-plane text-[10px]"></i>
-                      Settle Now
-                    </button>
-                    <button 
-                      onClick={() => handleWhatsAppReminder(s)} 
-                      className="flex-1 bg-green-50 text-green-600 py-4 rounded-2xl font-black text-[9px] uppercase tracking-widest border border-green-100 active:scale-95 transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <i className="fa-brands fa-whatsapp text-xs"></i>
-                      Remind
+                      <i className="fa-solid fa-receipt"></i>
+                      Settle payment
                     </button>
                   </div>
-                  <button 
-                    onClick={() => {setManualConfirmModal(s); setManualComment(''); setScreenshot(null);}} 
-                    className="mt-3 py-1 text-[8px] font-black text-slate-300 uppercase tracking-[0.2em] hover:text-indigo-500 transition-colors"
-                  >
-                    Record Payment Manually
-                  </button>
                 </div>
               );
             })}
@@ -180,9 +175,9 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in">
           <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl p-8 space-y-6">
             <div className="text-center space-y-2">
-              <h3 className="text-xl font-black">Manual Settlement</h3>
+              <h3 className="text-xl font-black">Record Settle Payment</h3>
               <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Recording settlement of <strong>₹{manualConfirmModal.amount.toFixed(0)}</strong> from <strong>{getParticipantName(manualConfirmModal.from)}</strong> to <strong>{getParticipantName(manualConfirmModal.to)}</strong>.
+                Confirming settlement of <strong>₹{manualConfirmModal.amount.toFixed(0)}</strong> from <strong>{getParticipantName(manualConfirmModal.from)}</strong> to <strong>{getParticipantName(manualConfirmModal.to)}</strong>.
               </p>
             </div>
 
@@ -207,11 +202,11 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-300 px-1">OR ADD A COMMENT</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-300 px-1">COMMENT (OPTIONAL)</label>
                 <textarea 
                   value={manualComment}
                   onChange={(e) => setManualComment(e.target.value)}
-                  placeholder="e.g. Paid in cash, Settle via GPay..."
+                  placeholder="Paid via UPI, Cash, etc."
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-bold focus:outline-none focus:border-indigo-600 focus:bg-white transition-all min-h-[80px] resize-none"
                 />
               </div>
@@ -221,9 +216,9 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                 <button 
                   disabled={(!screenshot && !manualComment.trim()) || isProcessing}
                   onClick={confirmManualSettle} 
-                  className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${(screenshot || manualComment.trim()) ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 text-slate-300 border border-slate-100'}`}
+                  className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${(screenshot || manualComment.trim()) ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 text-slate-300 border border-slate-100'}`}
                 >
-                  {isProcessing ? <i className="fa-solid fa-spinner animate-spin"></i> : "Confirm"}
+                  {isProcessing ? <i className="fa-solid fa-spinner animate-spin"></i> : "Confirm Settle"}
                 </button>
               </div>
             </div>
@@ -231,8 +226,8 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         </div>
       )}
 
-      {/* Simplified Summary Report Section */}
-      <div className="bg-white border border-slate-100 rounded-[2.5rem] p-8 sm:p-10 shadow-sm space-y-6">
+      {/* Summary Report */}
+      <div className="bg-white border border-slate-100 rounded-[2.5rem] p-8 sm:p-10 shadow-sm space-y-6 mx-2 sm:mx-0">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-black tracking-tight uppercase">Summary Report</h2>
         </div>
@@ -260,7 +255,8 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         </div>
       </div>
 
-      <div className="bg-white rounded-[2.5rem] p-8 sm:p-10 border border-slate-100 shadow-sm space-y-6">
+      {/* History */}
+      <div className="bg-white rounded-[2.5rem] p-8 sm:p-10 border border-slate-100 shadow-sm space-y-6 mx-2 sm:mx-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
             <i className="fa-solid fa-clock-rotate-left"></i>
@@ -321,25 +317,25 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in">
           <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl overflow-hidden">
             <div className="p-10 border-b border-slate-50 text-center bg-slate-50/50">
-               <span className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.3em] mb-3 block">PAYMENT GATEWAY</span>
+               <span className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.3em] mb-3 block">UPI PAYMENT</span>
                <h3 className="text-5xl font-black text-slate-900 tracking-tighter">₹{paymentModal.settlement.amount.toFixed(0)}</h3>
-               <p className="text-sm font-bold text-slate-500 mt-4">payable to: {getParticipantName(paymentModal.settlement.to)}</p>
+               <p className="text-sm font-bold text-slate-500 mt-4">Recipient: {getParticipantName(paymentModal.settlement.to)}</p>
             </div>
             
             <div className="p-8 space-y-3">
               {!showUpiInput ? (
                 <div className="grid grid-cols-2 gap-3">
-                  <button disabled={isProcessing} onClick={openUpiApp} className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-50 rounded-2xl border border-slate-100 active:scale-95 transition-all hover:bg-slate-100 disabled:opacity-50">
+                  <button onClick={openUpiApp} className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-50 rounded-2xl border border-slate-100 active:scale-95 transition-all hover:bg-slate-100">
                     <div className="text-3xl text-slate-900"><i className="fa-brands fa-google-pay"></i></div>
                     <span className="text-[9px] font-black uppercase text-slate-500">Google Pay</span>
                   </button>
-                  <button disabled={isProcessing} onClick={openUpiApp} className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-50 rounded-2xl border border-slate-100 active:scale-95 transition-all hover:bg-slate-100 disabled:opacity-50">
+                  <button onClick={openUpiApp} className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-50 rounded-2xl border border-slate-100 active:scale-95 transition-all hover:bg-slate-100">
                     <div className="text-3xl text-purple-600"><i className="fa-solid fa-mobile-screen-button"></i></div>
                     <span className="text-[9px] font-black uppercase text-slate-500">PhonePe</span>
                   </button>
-                  <button disabled={isProcessing} onClick={() => setShowUpiInput(true)} className="col-span-2 flex items-center justify-center gap-3 py-5 bg-indigo-50 rounded-2xl border border-indigo-100 active:scale-95 transition-all disabled:opacity-50">
+                  <button onClick={() => setShowUpiInput(true)} className="col-span-2 flex items-center justify-center gap-3 py-5 bg-indigo-50 rounded-2xl border border-indigo-100 active:scale-95 transition-all">
                     <div className="text-xl text-indigo-600"><i className="fa-solid fa-at"></i></div>
-                    <span className="text-[10px] font-black uppercase text-indigo-600">Custom UPI ID</span>
+                    <span className="text-[10px] font-black uppercase text-indigo-600">Enter UPI ID</span>
                   </button>
                 </div>
               ) : (
@@ -349,14 +345,12 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                     <input type="text" autoFocus value={manualUpi} onChange={e => setManualUpi(e.target.value)} placeholder="username@upi" className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-bold outline-none" />
                   </div>
                   <div className="flex gap-2">
-                    <button disabled={isProcessing} onClick={() => setShowUpiInput(false)} className="flex-1 py-5 bg-slate-100 rounded-2xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50">Back</button>
-                    <button disabled={isProcessing} onClick={openUpiApp} className="flex-[2] py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg disabled:opacity-50">
-                      {isProcessing ? <i className="fa-solid fa-spinner animate-spin"></i> : "Proceed"}
-                    </button>
+                    <button onClick={() => setShowUpiInput(false)} className="flex-1 py-5 bg-slate-100 rounded-2xl font-black text-[10px] uppercase tracking-widest">Back</button>
+                    <button onClick={openUpiApp} className="flex-[2] py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg">Proceed</button>
                   </div>
                 </div>
               )}
-              <button disabled={isProcessing} onClick={() => setPaymentModal(null)} className="w-full pt-6 text-[10px] font-black text-slate-300 uppercase tracking-widest text-center hover:text-slate-500 transition-colors disabled:opacity-50">Close Window</button>
+              <button onClick={() => setPaymentModal(null)} className="w-full pt-6 text-[10px] font-black text-slate-300 uppercase tracking-widest text-center hover:text-slate-500 transition-colors">Close</button>
             </div>
           </div>
         </div>
