@@ -31,6 +31,7 @@ const App: React.FC = () => {
   const [shareStatus, setShareStatus] = useState<'idle' | 'copied'>('idle');
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
 
   const navigate = (to: string) => {
@@ -141,6 +142,17 @@ const App: React.FC = () => {
       await loadData(routeMatch.code);
     } catch (err) {
       console.error("Add expense error:", err);
+    }
+  };
+
+  const handleUpdateExpense = async (id: string, exp: Partial<Expense>) => {
+    if (!activeEvent) return;
+    try {
+      await db.updateExpense(id, exp);
+      await loadData(routeMatch.code);
+      setEditingExpense(null);
+    } catch (err) {
+      console.error("Update expense error:", err);
     }
   };
 
@@ -308,10 +320,13 @@ const App: React.FC = () => {
                   }} 
                 />
               </div>
-              <div className="lg:col-span-8 order-2 space-y-8">
+              <div id="expense-form-section" className="lg:col-span-8 order-2 space-y-8">
                 <ExpenseForm 
                   participants={activeEvent.participants} 
-                  onAdd={handleAddExpense} 
+                  onAdd={handleAddExpense}
+                  onUpdate={handleUpdateExpense}
+                  editingExpense={editingExpense}
+                  onCancelEdit={() => setEditingExpense(null)}
                 />
                 <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
                   <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center lg:text-left">Recent Activity</h3>
@@ -408,9 +423,25 @@ const App: React.FC = () => {
               <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-300 uppercase">Label</span><span className="font-bold text-sm truncate max-w-[150px] text-right">{selectedExpense.description}</span></div>
               <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-300 uppercase">Amount</span><span className="font-black text-indigo-600 text-xl">₹{Number(selectedExpense.amount).toFixed(0)}</span></div>
             </div>
-            <button onClick={() => db.deleteExpense(selectedExpense.id).then(() => { setSelectedExpense(null); loadData(routeMatch.code); })} className="w-full py-4 bg-red-50 text-red-500 font-black text-[11px] uppercase rounded-2xl border border-red-100 transition-all hover:bg-red-100">
-              <i className="fa-solid fa-trash-can mr-2"></i>Delete Record
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button 
+                onClick={() => {
+                  setEditingExpense(selectedExpense);
+                  setSelectedExpense(null);
+                  const el = document.getElementById('expense-form-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }} 
+                className="w-full py-4 bg-indigo-50 text-indigo-600 font-black text-[11px] uppercase rounded-2xl border border-indigo-100 transition-all hover:bg-indigo-100"
+              >
+                <i className="fa-solid fa-pen mr-2"></i>Edit
+              </button>
+              <button 
+                onClick={() => db.deleteExpense(selectedExpense.id).then(() => { setSelectedExpense(null); loadData(routeMatch.code); })} 
+                className="w-full py-4 bg-red-50 text-red-500 font-black text-[11px] uppercase rounded-2xl border border-red-100 transition-all hover:bg-red-100"
+              >
+                <i className="fa-solid fa-trash-can mr-2"></i>Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

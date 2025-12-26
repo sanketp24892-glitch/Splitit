@@ -150,6 +150,28 @@ export const addExpense = async (eventId: string, e: Omit<Expense, 'id'>) => {
 };
 
 /**
+ * Updates an existing expense
+ */
+export const updateExpense = async (id: string, e: Partial<Expense>) => {
+  const payload: any = {};
+  if (e.description) payload.description = e.description;
+  if (e.amount !== undefined) payload.amount = e.amount;
+  if (e.payerId) payload.payer_id = e.payerId;
+  if (e.participantIds) payload.participant_ids = e.participantIds;
+  if (e.category) payload.category = e.category;
+
+  const { error } = await supabase
+    .from('expenses')
+    .update(payload)
+    .eq('id', id);
+
+  if (error) {
+    console.error("Update Expense Error:", error);
+    throw error;
+  }
+};
+
+/**
  * Deletes an expense by ID
  */
 export const deleteExpense = async (id: string) => {

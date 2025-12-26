@@ -1,14 +1,17 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Participant, Expense } from '../types.ts';
 import { parseReceipt } from '../services/geminiService.ts';
 
 interface Props {
   participants: Participant[];
   onAdd: (expense: Omit<Expense, 'id'>) => void;
+  onUpdate?: (id: string, expense: Partial<Expense>) => void;
+  editingExpense?: Expense | null;
+  onCancelEdit?: () => void;
 }
 
-const ExpenseForm: React.FC<Props> = ({ participants, onAdd }) => {
+const ExpenseForm: React.FC<Props> = ({ participants, onAdd, onUpdate, editingExpense, onCancelEdit }) => {
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [payerId, setPayerId] = useState('');
@@ -17,6 +20,17 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd }) => {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingExpense) {
+      setDescription(editingExpense.description);
+      setAmount(editingExpense.amount.toString());
+      setPayerId(editingExpense.payerId);
+      setCategory(editingExpense.category);
+      setDate(new Date(editingExpense.date).toISOString().split('T')[0]);
+      setSelectedParticipants(editingExpense.participantIds);
+    }
+  }, [editingExpense]);
 
   const toggleParticipant = (id: string) => {
     setSelectedParticipants(prev => 
@@ -35,37 +49,39 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (description && amount && payerId && selectedParticipants.length > 0) {
-      onAdd({
-        description,
-        amount: parseFloat(amount),
-        payerId,
-        participantIds: selectedParticipants,
-        category,
-        date: new Date(date).getTime()
-      });
-      setDescription('');
-      setAmount('');
-      setSelectedParticipants([]);
-      setDate(new Date().toISOString().split('T')[0]);
-    }
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsScanning(true);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = reader.result as string;
-      const data = await parseReceipt(base64);
-      if (data) {
-        setDescription(data.description);
-        setAmount(data.amount.toString());
-        setCategory(data.category);
+      if (editingExpense && onUpdate) {
+        onUpdate(editingExpense.id, {
+          description,
+          amount: parseFloat(amount),
+          payerId,
+          participantIds: selectedParticipants,
+          category,
+          date: new Date(date).getTime()
+        });
+      } else {
+        onAdd({
+          description,
+          amount: parseFloat(amount),
+          payerId,
+          participantIds: selectedParticipants,
+          category,
+          date: new Date(date).getTime()
+        });
       }
-      setIsScanning(false);
-    };
-    reader.readAsDataURL(file);
+      
+      if (!editingExpense) {
+        setDescription('');
+        setAmount('');
+        setSelectedParticipants([]);
+        setDate(new Date().toISOString().split('T')[0]);
+      } else if (onCancelEdit) {
+        onCancelEdit();
+        setDescription('');
+        setAmount('');
+        setSelectedParticipants([]);
+        setDate(new Date().toISOString().split('T')[0]);
+      }
+    }
   };
 
   return (
@@ -73,17 +89,43 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd }) => {
       <div className="flex justify-between items-center mb-6 sm:mb-8">
         <div className="flex items-center gap-2 text-[#1e293b]">
           <i className="fa-solid fa-receipt text-[#4f46e5]"></i>
-          <h2 className="text-lg sm:text-xl font-bold">Transactions</h2>
+          <h2 className="text-lg sm:text-xl font-bold">{editingExpense ? "Edit Transaction" : "Transactions"}</h2>
         </div>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isScanning}
-          className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-[9px] sm:text-[10px] font-bold text-[#4f46e5] bg-[#eef2ff] hover:bg-[#e0e7ff] transition-all uppercase tracking-wider whitespace-nowrap"
-        >
-          {isScanning ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-camera"></i>}
-          <span>SCAN RECEIPT</span>
-        </button>
-        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+        {!editingExpense && (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isScanning}
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-[9px] sm:text-[10px] font-bold text-[#4f46e5] bg-[#eef2ff] hover:bg-[#e0e7ff] transition-all uppercase tracking-wider whitespace-nowrap"
+          >
+            {isScanning ? <i className="fa-solid fa-spinner animate-spin"></i> : <i className="fa-solid fa-camera"></i>}
+            <span>SCAN RECEIPT</span>
+          </button>
+        )}
+        {editingExpense && onCancelEdit && (
+          <button
+            onClick={onCancelEdit}
+            className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-600"
+          >
+            CANCEL EDIT
+          </button>
+        )}
+        <input type="file" accept="image/*" ref={fileInputRef} onChange={async (e) => {
+           const file = e.target.files?.[0];
+           if (!file) return;
+           setIsScanning(true);
+           const reader = new FileReader();
+           reader.onload = async () => {
+             const base64 = reader.result as string;
+             const data = await parseReceipt(base64);
+             if (data) {
+               setDescription(data.description);
+               setAmount(data.amount.toString());
+               setCategory(data.category);
+             }
+             setIsScanning(false);
+           };
+           reader.readAsDataURL(file);
+        }} className="hidden" />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
@@ -189,7 +231,7 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd }) => {
           type="submit"
           className="w-full bg-[#4f46e5] text-white py-4 sm:py-5 rounded-2xl font-bold text-sm shadow-md hover:bg-[#4338ca] transition-all active:scale-[0.98] mt-2"
         >
-          Record Transaction
+          {editingExpense ? "Update Transaction" : "Record Transaction"}
         </button>
       </form>
     </div>
