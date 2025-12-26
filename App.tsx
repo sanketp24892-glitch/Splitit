@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Participant, Expense, SplitEvent } from './types.ts';
 import ParticipantManager from './components/ParticipantManager.tsx';
@@ -324,8 +325,8 @@ const App: React.FC = () => {
                   onAdd={handleAddParticipant} 
                   onRemove={async (id) => {
                     const participant = activeEvent.participants.find(p => p.id === id);
-                    if (window.confirm(`Are you sure you want to remove ${participant?.name || 'this member'}?`)) {
-                      await db.deleteParticipant(id, activeEvent.id, participant?.name);
+                    if (participant && window.confirm(`Are you sure you want to remove ${participant.name}?`)) {
+                      await db.deleteParticipant(id, activeEvent.id, participant.name);
                       loadData(routeMatch.code);
                     }
                   }} 
@@ -447,6 +448,14 @@ const App: React.FC = () => {
                   throw err;
                 }
               }}
+              onUndoSettlement={async (id) => {
+                if (!activeEvent) return;
+                const exp = activeEvent.expenses.find(e => e.id === id);
+                if (exp && window.confirm(`Undo this settlement of ₹${exp.amount}?`)) {
+                  await db.deleteExpense(id, activeEvent.id, "Settlement");
+                  await loadData(routeMatch.code);
+                }
+              }}
             />
           )}
         </main>
@@ -463,7 +472,7 @@ const App: React.FC = () => {
               <button onClick={() => handleShare('whatsapp')} className="w-full flex items-center justify-center gap-3 py-4 bg-green-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">
                 <i className="fa-brands fa-whatsapp text-lg"></i> WhatsApp
               </button>
-              <button onClick={() => handleShare('sms')} className="w-full flex items-center justify-center gap-3 py-4 bg-indigo-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">
+              <button onClick={() => handleShare('sms')} className="w-full flex items-center justify-center gap-3 py-4 bg-indigo-50 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">
                 <i className="fa-solid fa-comment-sms text-lg"></i> Text Message
               </button>
               <button onClick={() => handleShare('copy')} className={`w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${shareStatus==='copied' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-900'}`}>

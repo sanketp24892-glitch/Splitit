@@ -9,9 +9,10 @@ interface Props {
   expenses: Expense[];
   totalSpent: number;
   onSettle: (fromId: string, toId: string, amount: number, description: string, proof?: string) => Promise<void>;
+  onUndoSettlement: (expenseId: string) => Promise<void>;
 }
 
-const SettlementView: React.FC<Props> = ({ participants, balances, settlements, expenses, totalSpent, onSettle }) => {
+const SettlementView: React.FC<Props> = ({ participants, balances, settlements, expenses, totalSpent, onSettle, onUndoSettlement }) => {
   const [paymentModal, setPaymentModal] = useState<{ settlement: Settlement; show: boolean } | null>(null);
   const [manualConfirmModal, setManualConfirmModal] = useState<Settlement | null>(null);
   const [screenshot, setScreenshot] = useState<string | null>(null);
@@ -307,8 +308,17 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                       </div>
                    </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-black text-slate-900">₹{Number(h.amount).toFixed(0)}</p>
+                <div className="text-right flex flex-col items-end shrink-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-black text-slate-900">₹{Number(h.amount).toFixed(0)}</p>
+                    <button 
+                      onClick={() => onUndoSettlement(h.id)}
+                      className="w-6 h-6 rounded-lg hover:bg-red-50 text-slate-300 hover:text-red-500 flex items-center justify-center transition-all"
+                      title="Undo"
+                    >
+                      <i className="fa-solid fa-rotate-left text-[9px]"></i>
+                    </button>
+                  </div>
                   <p className="text-[8px] font-bold text-slate-300 uppercase">{new Date(h.date).toLocaleDateString()}</p>
                 </div>
               </div>
