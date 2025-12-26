@@ -22,7 +22,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getParticipant = (id: string) => participants.find(p => p.id === id);
-  const getParticipantName = (id: string) => getParticipant(id)?.name || 'Member';
+  const getParticipantName = (id: string) => getParticipant(id)?.name || 'member';
 
   const settlementHistory = useMemo(() => {
     return expenses
@@ -133,7 +133,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex flex-col items-center gap-2 min-w-0 flex-1">
                       <img src={payer?.avatar} className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 shadow-sm" />
-                      <p className="text-[11px] font-black uppercase text-slate-900 truncate tracking-tight w-full text-center">{payer?.name}</p>
+                      <p className="text-[11px] font-black lowercase text-slate-900 truncate tracking-tight w-full text-center">{payer?.name}</p>
                     </div>
                     <div className="flex flex-col items-center px-4">
                       <span className="text-[8px] font-black text-slate-300 uppercase mb-1">OWES</span>
@@ -143,7 +143,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                     </div>
                     <div className="flex flex-col items-center gap-2 min-w-0 flex-1">
                       <img src={receiver?.avatar} className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 shadow-sm" />
-                      <p className="text-[11px] font-black uppercase text-slate-900 truncate tracking-tight w-full text-center">{receiver?.name}</p>
+                      <p className="text-[11px] font-black lowercase text-slate-900 truncate tracking-tight w-full text-center">{receiver?.name}</p>
                     </div>
                   </div>
 
@@ -233,8 +233,8 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
             <div className="space-y-3">
               {settlements.map((s, i) => (
                 <div key={i} className="flex items-center justify-between py-3 border-b border-slate-50 last:border-0">
-                  <p className="text-xs font-bold text-slate-600 uppercase tracking-tight">
-                    <span className="text-slate-900">{getParticipantName(s.from)}</span> pays <span className="text-slate-900">{getParticipantName(s.to)}</span>
+                  <p className="text-xs text-slate-600 tracking-tight">
+                    <span className="text-slate-900 font-bold lowercase">{getParticipantName(s.from)}</span> pays <span className="text-slate-900 font-bold lowercase">{getParticipantName(s.to)}</span>
                   </p>
                   <p className="text-sm font-black text-slate-900">₹{s.amount.toFixed(0)}</p>
                 </div>
@@ -271,7 +271,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                      <i className={h.description.includes('Manual') ? "fa-solid fa-camera" : "fa-solid fa-mobile-screen"}></i>
                    </div>
                    <div className="min-w-0">
-                      <p className="text-xs font-black uppercase tracking-tight truncate">
+                      <p className="text-xs font-black lowercase tracking-tight truncate">
                         {getParticipantName(h.payerId)} → {getParticipantName(h.participantIds[0])}
                       </p>
                       <div className="flex items-center gap-2">
@@ -312,7 +312,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
             <div className="p-10 border-b border-slate-50 text-center bg-slate-50/50">
                <span className="text-[10px] font-black text-indigo-500 uppercase tracking-[0.3em] mb-3 block">PAYMENT GATEWAY</span>
                <h3 className="text-5xl font-black text-slate-900 tracking-tighter">₹{paymentModal.settlement.amount.toFixed(0)}</h3>
-               <p className="text-sm font-bold text-slate-500 mt-4 uppercase">Payable To: {getParticipantName(paymentModal.settlement.to)}</p>
+               <p className="text-sm font-bold text-slate-500 mt-4 lowercase">payable to: {getParticipantName(paymentModal.settlement.to)}</p>
             </div>
             
             <div className="p-8 space-y-3">

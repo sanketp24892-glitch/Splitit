@@ -86,7 +86,7 @@ export const fetchEventByCode = async (shortCode: string) => {
       shortCode: event.short_code,
       participants: (participants || []).map(p => ({
         id: p.id,
-        name: p.name,
+        name: p.name.toLowerCase(), // Ensure name is always lowercase
         avatar: p.avatar,
         upiId: p.upi_id // Mapping database upi_id to app upiId
       })),
@@ -112,7 +112,7 @@ export const addParticipant = async (eventId: string, p: Omit<Participant, 'id'>
   const { data, error } = await supabase
     .from('participants')
     .insert([{ 
-      name: p.name, 
+      name: p.name.toLowerCase(), // Store names in lowercase
       avatar: p.avatar, 
       upi_id: p.upiId || null, // Explicit mapping to database column upi_id
       event_id: eventId 
@@ -127,10 +127,11 @@ export const addParticipant = async (eventId: string, p: Omit<Participant, 'id'>
   const result = data?.[0];
   if (!result) throw new Error("No data returned from insert");
 
-  await logActivity(eventId, `Member "${p.name}" joined the squad`);
+  await logActivity(eventId, `Member "${p.name.toLowerCase()}" joined the squad`);
 
   return {
     ...result,
+    name: result.name.toLowerCase(),
     upiId: result.upi_id // Return mapped for UI
   };
 };
@@ -140,7 +141,7 @@ export const addParticipant = async (eventId: string, p: Omit<Participant, 'id'>
  */
 export const updateParticipant = async (id: string, updates: Partial<Participant>, eventId?: string) => {
   const payload: any = {};
-  if (updates.name) payload.name = updates.name;
+  if (updates.name) payload.name = updates.name.toLowerCase();
   if (updates.upiId !== undefined) payload.upi_id = updates.upiId;
   
   const { error } = await supabase
@@ -154,7 +155,7 @@ export const updateParticipant = async (id: string, updates: Partial<Participant
   }
 
   if (eventId && updates.name) {
-    await logActivity(eventId, `Member details updated for "${updates.name}"`);
+    await logActivity(eventId, `Member details updated for "${updates.name.toLowerCase()}"`);
   }
 };
 
@@ -166,7 +167,7 @@ export const deleteParticipant = async (id: string, eventId?: string, name?: str
   if (error) {
     console.error("Delete Participant Error:", error);
   } else if (eventId && name) {
-    await logActivity(eventId, `Member "${name}" was removed`);
+    await logActivity(eventId, `Member "${name.toLowerCase()}" was removed`);
   }
 };
 
