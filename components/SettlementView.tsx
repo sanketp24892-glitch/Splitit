@@ -124,39 +124,47 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
             <p className="text-sm font-medium text-slate-400 mt-2">Everyone has paid their share. Time for the next trip?</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {settlements.map((s, idx) => {
               const payer = getParticipant(s.from);
               const receiver = getParticipant(s.to);
               return (
-                <div key={idx} className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm hover:shadow-xl transition-all flex flex-col group relative overflow-hidden">
-                  <div className="flex items-center gap-4 mb-8">
-                    <div className="flex items-center">
-                      <div className="relative">
-                        <img src={payer?.avatar} className="w-12 h-12 rounded-2xl bg-indigo-50 border-2 border-white shadow-sm" />
-                        <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-7 h-7 bg-indigo-600 rounded-full flex items-center justify-center shadow-md border-2 border-white z-10">
-                          <i className="fa-solid fa-arrow-right text-[10px] text-white"></i>
-                        </div>
+                <div key={idx} className="bg-white rounded-[2rem] p-5 border border-slate-100 shadow-sm hover:border-indigo-100 transition-all flex flex-col relative">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex -space-x-3 shrink-0">
+                        <img src={payer?.avatar} className="w-10 h-10 rounded-xl bg-slate-50 border-2 border-white shadow-sm relative z-10" />
+                        <img src={receiver?.avatar} className="w-10 h-10 rounded-xl bg-slate-50 border-2 border-white shadow-sm relative z-0" />
                       </div>
-                      <img src={receiver?.avatar} className="w-12 h-12 rounded-2xl bg-indigo-50 border-2 border-white shadow-sm -ml-1" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-black text-slate-800 truncate leading-tight uppercase tracking-tight">{payer?.name} → {receiver?.name}</p>
+                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Payment Pending</p>
+                      </div>
                     </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[9px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-1">To {receiver?.name}</p>
-                      <h3 className="text-3xl font-black text-slate-900 tracking-tighter">₹{s.amount.toFixed(0)}</h3>
+                    <div className="text-right shrink-0 ml-2">
+                      <h3 className="text-2xl font-black text-indigo-600 tracking-tighter">₹{s.amount.toFixed(0)}</h3>
                     </div>
                   </div>
 
-                  <div className="mb-6 px-1">
-                    <p className="text-[11px] font-bold text-slate-500 leading-tight">
-                      <span className="text-slate-900 font-black">{payer?.name}</span> needs to send this amount to <span className="text-slate-900 font-black">{receiver?.name}</span> to settle their share.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 mt-auto">
-                    <button onClick={() => {setPaymentModal({settlement: s, show: true}); setShowUpiInput(false);}} className="bg-indigo-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-100 active:scale-95 transition-all">Make Payment</button>
-                    <button onClick={() => handleWhatsAppReminder(s)} className="bg-green-50 text-green-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-green-100 active:scale-95">WhatsApp</button>
-                    <button onClick={() => {setManualConfirmModal(s); setManualComment(''); setScreenshot(null);}} className="col-span-2 py-3.5 bg-slate-50 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-dashed border-slate-200 hover:bg-slate-100 transition-all">Settle Manually</button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {setPaymentModal({settlement: s, show: true}); setShowUpiInput(false);}} 
+                      className="flex-[2] bg-indigo-600 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-indigo-50"
+                    >
+                      Pay Now
+                    </button>
+                    <button 
+                      onClick={() => handleWhatsAppReminder(s)} 
+                      className="flex-1 bg-green-50 text-green-600 py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest border border-green-100 active:scale-95 transition-all"
+                    >
+                      Remind
+                    </button>
+                    <button 
+                      onClick={() => {setManualConfirmModal(s); setManualComment(''); setScreenshot(null);}} 
+                      className="flex-1 bg-slate-50 text-slate-400 py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest border border-slate-100 active:scale-95 transition-all"
+                    >
+                      Manual
+                    </button>
                   </div>
                 </div>
               );
