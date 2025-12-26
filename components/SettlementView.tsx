@@ -7,7 +7,7 @@ interface Props {
   balances: Balance[];
   settlements: Settlement[];
   totalSpent: number;
-  onSettle: (fromId: string, toId: string, amount: number) => void;
+  onSettle: (fromId: string, toId: string, amount: number, proof?: string) => void;
 }
 
 const SettlementView: React.FC<Props> = ({ participants, balances, settlements, totalSpent, onSettle }) => {
@@ -56,7 +56,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
 
   const confirmManualSettle = () => {
     if (manualConfirmModal && screenshot) {
-      onSettle(manualConfirmModal.from, manualConfirmModal.to, manualConfirmModal.amount);
+      onSettle(manualConfirmModal.from, manualConfirmModal.to, manualConfirmModal.amount, screenshot);
       setManualConfirmModal(null);
       setScreenshot(null);
     }

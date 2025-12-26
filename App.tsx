@@ -340,7 +340,8 @@ const App: React.FC = () => {
                             <div className="min-w-0 flex-1">
                               <p className="font-black text-slate-800 text-sm truncate">{e.description}</p>
                               <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
-                                {activeEvent.participants.find(p=>p.id===e.payerId)?.name || 'Member'} paid
+                                {activeEvent.participants.find(p=>p.id===e.payerId)?.name || 'Member'} paid {e.category === 'Payment' ? 'to settle' : ''}
+                                {e.proofUrl && <span className="ml-2 text-indigo-500"><i className="fa-solid fa-paperclip text-[8px]"></i> PROOF</span>}
                               </p>
                             </div>
                             <p className="font-black text-slate-900 text-sm whitespace-nowrap">₹{Number(e.amount).toFixed(0)}</p>
@@ -375,14 +376,15 @@ const App: React.FC = () => {
               balances={balances} 
               settlements={settlements} 
               totalSpent={totalSpent} 
-              onSettle={async (f, t, a) => {
+              onSettle={async (f, t, a, proof) => {
                 await db.addExpense(activeEvent.id, { 
-                  description: `Settlement Record`, 
+                  description: `Manual Settlement`, 
                   amount: a, 
                   payerId: f, 
                   participantIds: [t], 
                   category: 'Payment', 
-                  date: Date.now() 
+                  date: Date.now(),
+                  proofUrl: proof
                 });
                 loadData(routeMatch.code);
               }}
@@ -422,6 +424,14 @@ const App: React.FC = () => {
             <div className="space-y-4 pt-4 border-t border-slate-50">
               <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-300 uppercase">Label</span><span className="font-bold text-sm truncate max-w-[150px] text-right">{selectedExpense.description}</span></div>
               <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-300 uppercase">Amount</span><span className="font-black text-indigo-600 text-xl">₹{Number(selectedExpense.amount).toFixed(0)}</span></div>
+              {selectedExpense.proofUrl && (
+                <div className="pt-4 space-y-2">
+                  <span className="text-[10px] font-black text-slate-300 uppercase block">Settlement Proof</span>
+                  <div className="relative rounded-2xl overflow-hidden border border-slate-100 shadow-sm">
+                    <img src={selectedExpense.proofUrl} alt="Proof" className="w-full h-auto max-h-60 object-contain bg-slate-50" />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-2">
               <button 

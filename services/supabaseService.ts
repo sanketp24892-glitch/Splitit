@@ -62,7 +62,8 @@ export const fetchEventByCode = async (shortCode: string) => {
         ...e,
         payerId: e.payer_id,
         participantIds: e.participant_ids,
-        date: new Date(e.created_at).getTime()
+        date: new Date(e.created_at).getTime(),
+        proofUrl: e.proof_url
       })),
       createdAt: new Date(event.created_at).getTime()
     };
@@ -135,9 +136,9 @@ export const addExpense = async (eventId: string, e: Omit<Expense, 'id'>) => {
       description: e.description,
       amount: e.amount,
       payer_id: e.payerId,
-      // Fixed: Property 'participant_ids' does not exist on type 'Omit<Expense, "id">'. Using 'participantIds' from the Expense interface.
       participant_ids: e.participantIds,
-      category: e.category
+      category: e.category,
+      proof_url: e.proofUrl || null
     }])
     .select()
     .single();
@@ -159,6 +160,7 @@ export const updateExpense = async (id: string, e: Partial<Expense>) => {
   if (e.payerId) payload.payer_id = e.payerId;
   if (e.participantIds) payload.participant_ids = e.participantIds;
   if (e.category) payload.category = e.category;
+  if (e.proofUrl !== undefined) payload.proof_url = e.proofUrl;
 
   const { error } = await supabase
     .from('expenses')

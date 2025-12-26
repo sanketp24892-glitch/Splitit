@@ -14,6 +14,7 @@ export interface Expense {
   participantIds: string[];
   date: number;
   category: 'Food' | 'Transport' | 'Lodging' | 'Entertainment' | 'Payment' | 'Other';
+  proofUrl?: string;
 }
 
 export interface Settlement {
