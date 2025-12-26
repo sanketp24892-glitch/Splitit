@@ -65,6 +65,12 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // 1MB = 1024 * 1024 bytes
+      if (file.size > 1024 * 1024) {
+        alert("File is too large. Please select a screenshot smaller than 1MB.");
+        e.target.value = ''; // Reset input
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setScreenshot(reader.result as string);
@@ -82,7 +88,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         setScreenshot(null);
       } catch (err) {
         console.error("Manual settlement error:", err);
-        alert("Failed to record settlement. The image might be too large.");
+        alert("Failed to record settlement. Please try a smaller image.");
       } finally {
         setIsProcessing(false);
       }
