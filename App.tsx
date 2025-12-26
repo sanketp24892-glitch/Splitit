@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Participant, Expense, SplitEvent } from './types.ts';
 import ParticipantManager from './components/ParticipantManager.tsx';
@@ -374,7 +373,7 @@ const App: React.FC = () => {
                                 <span className="text-[9px] font-bold text-slate-500 uppercase truncate tracking-tighter">{e.category}</span>
                                 <span className="text-[10px] font-black text-slate-800 truncate">{payer}</span>
                                 <span className="text-[10px] font-black text-indigo-600 text-center">₹{Number(e.amount).toFixed(0)}</span>
-                                <span className="text-[9px] font-medium text-slate-400 text-right truncate">{splitAmong}</span>
+                                <span className="text-[9px] font-medium text-slate-400 text-right leading-tight">{splitAmong}</span>
                               </div>
                             );
                           })
