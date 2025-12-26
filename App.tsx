@@ -195,21 +195,24 @@ const App: React.FC = () => {
   if (routeMatch.type === 'home') {
     return (
       <div className="min-h-screen bg-white flex flex-col font-sans animate-in overflow-hidden relative">
-        <header className="p-8 absolute top-0 left-0 z-10">
+        <header className="p-6 sm:p-8 absolute top-0 left-0 z-10 w-full">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-xl shadow-lg shadow-indigo-100">
               <i className="fa-solid fa-receipt"></i>
             </div>
             <div className="flex flex-col">
-              <h1 className="text-xl font-black text-slate-900 tracking-tighter leading-none">splitIt</h1>
-              <p className="text-[9px] font-bold text-slate-400 lowercase tracking-tight mt-1">
+              <h1 className="text-xl font-black tracking-tighter leading-none">
+                <span className="text-slate-900">Split</span>
+                <span className="text-indigo-600">It</span>
+              </h1>
+              <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight mt-1 whitespace-nowrap overflow-visible">
                 trips end. memories stay. debts don’t.
               </p>
             </div>
           </div>
         </header>
 
-        <main className="flex-1 flex flex-col items-center justify-center px-6 max-w-4xl mx-auto w-full text-center space-y-8 pt-10">
+        <main className="flex-1 flex flex-col items-center justify-center px-6 max-w-4xl mx-auto w-full text-center space-y-8 pt-20">
           <div className="space-y-4">
             <h1 className="text-[54px] sm:text-[90px] font-[900] text-slate-900 tracking-tighter leading-[0.9] max-w-2xl mx-auto">
               Stop doing <span className="text-indigo-600 italic">awkward</span> math.
