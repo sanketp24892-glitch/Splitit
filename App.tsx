@@ -263,6 +263,33 @@ const App: React.FC = () => {
             Try Splitit → <span className="underline cursor-pointer">www.splitits.in</span>
           </p>
         </footer>
+
+        {showAppShareModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-in">
+            <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl p-8 text-center space-y-6">
+              <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl mx-auto shadow-lg"><i className="fa-solid fa-share-nodes"></i></div>
+              <h3 className="text-xl font-black">Share SplitIt</h3>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">Help your friends stop doing awkward math too!</p>
+              
+              <div className="grid grid-cols-1 gap-3">
+                <button onClick={() => handleShare('whatsapp', true)} className="w-full flex items-center justify-center gap-3 py-4 bg-green-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">
+                  <i className="fa-brands fa-whatsapp text-lg"></i> WhatsApp
+                </button>
+                <button onClick={() => handleShare('gmail', true)} className="w-full flex items-center justify-center gap-3 py-4 bg-red-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">
+                  <i className="fa-solid fa-envelope text-lg"></i> Gmail
+                </button>
+                <button onClick={() => handleShare('sms', true)} className="w-full flex items-center justify-center gap-3 py-4 bg-indigo-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">
+                  <i className="fa-solid fa-comment-sms text-lg"></i> Text Message
+                </button>
+                <button onClick={() => handleShare('copy', true)} className={`w-full flex items-center justify-center gap-3 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${shareStatus==='copied' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-900'}`}>
+                  {shareStatus==='copied' ? <><i className="fa-solid fa-check"></i> Copied</> : <><i className="fa-solid fa-link"></i> Copy Link</>}
+                </button>
+              </div>
+              
+              <button onClick={() => setShowAppShareModal(false)} className="w-full py-2 text-[10px] font-black text-slate-300 uppercase">Close</button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
