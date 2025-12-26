@@ -130,7 +130,9 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd, onUpdate, editingEx
 
       <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
         <div className="space-y-2">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">DESCRIPTION</label>
+          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">
+            <span className="text-red-500">*</span> DESCRIPTION
+          </label>
           <input
             type="text"
             required
@@ -143,7 +145,9 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd, onUpdate, editingEx
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">AMOUNT</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">
+              <span className="text-red-500">*</span> AMOUNT
+            </label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">₹</span>
               <input
