@@ -129,43 +129,46 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
               const payer = getParticipant(s.from);
               const receiver = getParticipant(s.to);
               return (
-                <div key={idx} className="bg-white rounded-[2rem] p-5 border border-slate-100 shadow-sm hover:border-indigo-100 transition-all flex flex-col relative">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex -space-x-3 shrink-0">
-                        <img src={payer?.avatar} className="w-10 h-10 rounded-xl bg-slate-50 border-2 border-white shadow-sm relative z-10" />
-                        <img src={receiver?.avatar} className="w-10 h-10 rounded-xl bg-slate-50 border-2 border-white shadow-sm relative z-0" />
+                <div key={idx} className="bg-white rounded-[2rem] p-5 border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col relative overflow-hidden">
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="space-y-3 flex-1 min-w-0 pr-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 bg-slate-50 rounded-lg flex items-center justify-center text-[9px] text-slate-400 font-black uppercase shrink-0">From</div>
+                        <p className="text-[11px] font-black text-slate-900 uppercase truncate">{payer?.name}</p>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-black text-slate-800 truncate leading-tight uppercase tracking-tight">{payer?.name} → {receiver?.name}</p>
-                        <p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Payment Pending</p>
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center text-[9px] font-black uppercase shrink-0">To</div>
+                        <p className="text-[11px] font-black text-indigo-600 uppercase truncate">{receiver?.name}</p>
                       </div>
                     </div>
-                    <div className="text-right shrink-0 ml-2">
-                      <h3 className="text-2xl font-black text-indigo-600 tracking-tighter">₹{s.amount.toFixed(0)}</h3>
+                    <div className="text-right shrink-0">
+                      <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-0.5">Owes</p>
+                      <h3 className="text-2xl font-black text-slate-900 tracking-tighter">₹{s.amount.toFixed(0)}</h3>
                     </div>
                   </div>
 
                   <div className="flex gap-2">
                     <button 
                       onClick={() => {setPaymentModal({settlement: s, show: true}); setShowUpiInput(false);}} 
-                      className="flex-[2] bg-indigo-600 text-white py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-indigo-50"
+                      className="flex-[2] bg-indigo-600 text-white py-4 rounded-2xl font-black text-[9px] uppercase tracking-widest active:scale-95 transition-all shadow-md shadow-indigo-100 flex items-center justify-center gap-2"
                     >
-                      Pay Now
+                      <i className="fa-solid fa-paper-plane text-[10px]"></i>
+                      Settle Now
                     </button>
                     <button 
                       onClick={() => handleWhatsAppReminder(s)} 
-                      className="flex-1 bg-green-50 text-green-600 py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest border border-green-100 active:scale-95 transition-all"
+                      className="flex-1 bg-green-50 text-green-600 py-4 rounded-2xl font-black text-[9px] uppercase tracking-widest border border-green-100 active:scale-95 transition-all flex items-center justify-center gap-1.5"
                     >
+                      <i className="fa-brands fa-whatsapp text-xs"></i>
                       Remind
                     </button>
-                    <button 
-                      onClick={() => {setManualConfirmModal(s); setManualComment(''); setScreenshot(null);}} 
-                      className="flex-1 bg-slate-50 text-slate-400 py-3.5 rounded-2xl font-black text-[9px] uppercase tracking-widest border border-slate-100 active:scale-95 transition-all"
-                    >
-                      Manual
-                    </button>
                   </div>
+                  <button 
+                    onClick={() => {setManualConfirmModal(s); setManualComment(''); setScreenshot(null);}} 
+                    className="mt-3 py-1 text-[8px] font-black text-slate-300 uppercase tracking-[0.2em] hover:text-indigo-500 transition-colors"
+                  >
+                    Record Payment Manually
+                  </button>
                 </div>
               );
             })}
