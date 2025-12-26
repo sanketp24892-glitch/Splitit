@@ -13,6 +13,12 @@ interface RecentEvent {
   name: string;
 }
 
+interface ActivityLog {
+  id: string;
+  description: string;
+  created_at: string;
+}
+
 const generateShortId = () => {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -33,6 +39,7 @@ const App: React.FC = () => {
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [recentEvents, setRecentEvents] = useState<RecentEvent[]>([]);
+  const [activities, setActivities] = useState<ActivityLog[]>([]);
 
   const navigate = (to: string) => {
     window.history.pushState(null, "", to);
@@ -75,6 +82,8 @@ const App: React.FC = () => {
       if (data) {
         setActiveEvent(data);
         addToRecent(code, data.name);
+        const history = await db.fetchActivityHistory(data.id);
+        setActivities(history);
       }
     } catch (err) {
       console.error("Failed to load event:", err);
@@ -148,7 +157,7 @@ const App: React.FC = () => {
   const handleUpdateExpense = async (id: string, exp: Partial<Expense>) => {
     if (!activeEvent) return;
     try {
-      await db.updateExpense(id, exp);
+      await db.updateExpense(id, exp, activeEvent.id);
       await loadData(routeMatch.code);
       setEditingExpense(null);
     } catch (err) {
@@ -315,8 +324,11 @@ const App: React.FC = () => {
                   participants={activeEvent.participants} 
                   onAdd={handleAddParticipant} 
                   onRemove={async (id) => {
-                    await db.deleteParticipant(id);
-                    loadData(routeMatch.code);
+                    const participant = activeEvent.participants.find(p => p.id === id);
+                    if (window.confirm(`Are you sure you want to remove ${participant?.name || 'this member'}?`)) {
+                      await db.deleteParticipant(id, activeEvent.id, participant?.name);
+                      loadData(routeMatch.code);
+                    }
                   }} 
                 />
               </div>
@@ -328,26 +340,52 @@ const App: React.FC = () => {
                   editingExpense={editingExpense}
                   onCancelEdit={() => setEditingExpense(null)}
                 />
-                <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center lg:text-left">Recent Activity</h3>
-                  <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-hide">
-                    {activeEvent.expenses.filter(ex => ex.category !== 'Payment').length === 0 ? (
-                      <div className="text-center py-10 text-slate-200 font-black text-[10px] uppercase">No activity yet</div>
-                    ) : (
-                      activeEvent.expenses.filter(ex => ex.category !== 'Payment').sort((a,b)=>b.date-a.date).map(e => (
-                        <div key={e.id} onClick={() => setSelectedExpense(e)} className={`p-4 rounded-2xl border transition-all cursor-pointer bg-white border-slate-50 hover:border-indigo-100`}>
-                          <div className="flex justify-between items-center gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="font-black text-slate-800 text-sm truncate">{e.description}</p>
-                              <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
-                                {activeEvent.participants.find(p=>p.id===e.payerId)?.name || 'Member'} paid
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Recent Activity List */}
+                  <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm flex flex-col">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center lg:text-left">Recent Activity</h3>
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-hide flex-1">
+                      {activeEvent.expenses.filter(ex => ex.category !== 'Payment').length === 0 ? (
+                        <div className="text-center py-10 text-slate-200 font-black text-[10px] uppercase">No activity yet</div>
+                      ) : (
+                        activeEvent.expenses.filter(ex => ex.category !== 'Payment').sort((a,b)=>b.date-a.date).map(e => (
+                          <div key={e.id} onClick={() => setSelectedExpense(e)} className={`p-4 rounded-2xl border transition-all cursor-pointer bg-white border-slate-50 hover:border-indigo-100`}>
+                            <div className="flex justify-between items-center gap-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-black text-slate-800 text-sm truncate">{e.description}</p>
+                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
+                                  {activeEvent.participants.find(p=>p.id===e.payerId)?.name || 'Member'} paid
+                                </p>
+                              </div>
+                              <p className="font-black text-slate-900 text-sm whitespace-nowrap">₹{Number(e.amount).toFixed(0)}</p>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Update History Section */}
+                  <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm flex flex-col">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center lg:text-left">Update History</h3>
+                    <div className="space-y-4 max-h-[300px] overflow-y-auto scrollbar-hide flex-1">
+                      {activities.length === 0 ? (
+                        <div className="text-center py-10 text-slate-200 font-black text-[10px] uppercase">No updates yet</div>
+                      ) : (
+                        activities.map((act) => (
+                          <div key={act.id} className="flex gap-3 items-start p-1">
+                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0"></div>
+                            <div>
+                              <p className="text-[11px] font-bold text-slate-700 leading-tight">{act.description}</p>
+                              <p className="text-[8px] font-black text-slate-300 uppercase tracking-tight mt-1">
+                                {new Date(act.created_at).toLocaleDateString()} · {new Date(act.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </p>
                             </div>
-                            <p className="font-black text-slate-900 text-sm whitespace-nowrap">₹{Number(e.amount).toFixed(0)}</p>
                           </div>
-                        </div>
-                      ))
-                    )}
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -451,7 +489,13 @@ const App: React.FC = () => {
                 <i className="fa-solid fa-pen mr-2"></i>Edit
               </button>
               <button 
-                onClick={() => db.deleteExpense(selectedExpense.id).then(() => { setSelectedExpense(null); loadData(routeMatch.code); })} 
+                onClick={async () => {
+                  if (window.confirm(`Are you sure you want to delete "${selectedExpense.description}"?`)) {
+                    await db.deleteExpense(selectedExpense.id, activeEvent?.id, selectedExpense.description);
+                    setSelectedExpense(null);
+                    loadData(routeMatch.code);
+                  }
+                }} 
                 className="w-full py-4 bg-red-50 text-red-500 font-black text-[11px] uppercase rounded-2xl border border-red-100 transition-all hover:bg-red-100"
               >
                 <i className="fa-solid fa-trash-can mr-2"></i>Delete

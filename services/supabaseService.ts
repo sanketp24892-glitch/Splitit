@@ -9,6 +9,35 @@ const SUPABASE_ANON_KEY = 'sb_publishable_bFgmsQkkShvZYtyLf7ASEA_I1J6Y3zw';
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /**
+ * Logs an action to the activity_log table
+ */
+export const logActivity = async (eventId: string, description: string) => {
+  try {
+    await supabase.from('activity_log').insert([{ event_id: eventId, description }]);
+  } catch (err) {
+    console.error("Log Activity Error:", err);
+  }
+};
+
+/**
+ * Fetches the activity history for an event
+ */
+export const fetchActivityHistory = async (eventId: string) => {
+  const { data, error } = await supabase
+    .from('activity_log')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  
+  if (error) {
+    console.error("Fetch History Error:", error);
+    return [];
+  }
+  return data || [];
+};
+
+/**
  * Creates a new event entry in the 'events' table
  */
 export const createEvent = async (name: string, shortCode: string): Promise<string> => {
@@ -21,7 +50,11 @@ export const createEvent = async (name: string, shortCode: string): Promise<stri
     console.error("Supabase Create Event Error:", error);
     throw error;
   }
-  return data?.[0]?.id;
+  const eventId = data?.[0]?.id;
+  if (eventId) {
+    await logActivity(eventId, `Event "${name}" was created`);
+  }
+  return eventId;
 };
 
 /**
@@ -94,6 +127,8 @@ export const addParticipant = async (eventId: string, p: Omit<Participant, 'id'>
   const result = data?.[0];
   if (!result) throw new Error("No data returned from insert");
 
+  await logActivity(eventId, `Member "${p.name}" joined the squad`);
+
   return {
     ...result,
     upiId: result.upi_id // Return mapped for UI
@@ -103,7 +138,7 @@ export const addParticipant = async (eventId: string, p: Omit<Participant, 'id'>
 /**
  * Updates a participant's details
  */
-export const updateParticipant = async (id: string, updates: Partial<Participant>) => {
+export const updateParticipant = async (id: string, updates: Partial<Participant>, eventId?: string) => {
   const payload: any = {};
   if (updates.name) payload.name = updates.name;
   if (updates.upiId !== undefined) payload.upi_id = updates.upiId;
@@ -117,14 +152,22 @@ export const updateParticipant = async (id: string, updates: Partial<Participant
     console.error("Update Participant Error:", error);
     throw error;
   }
+
+  if (eventId && updates.name) {
+    await logActivity(eventId, `Member details updated for "${updates.name}"`);
+  }
 };
 
 /**
  * Deletes a participant by ID
  */
-export const deleteParticipant = async (id: string) => {
+export const deleteParticipant = async (id: string, eventId?: string, name?: string) => {
   const { error } = await supabase.from('participants').delete().eq('id', id);
-  if (error) console.error("Delete Participant Error:", error);
+  if (error) {
+    console.error("Delete Participant Error:", error);
+  } else if (eventId && name) {
+    await logActivity(eventId, `Member "${name}" was removed`);
+  }
 };
 
 /**
@@ -138,7 +181,6 @@ export const addExpense = async (eventId: string, e: Omit<Expense, 'id'>) => {
       description: e.description || "Expense",
       amount: Number(e.amount) || 0,
       payer_id: e.payerId,
-      // Fix: Changed e.participant_ids to e.participantIds to match the Expense type definition.
       participant_ids: e.participantIds || [],
       category: e.category || 'Other',
       proof_url: e.proofUrl || null
@@ -149,13 +191,19 @@ export const addExpense = async (eventId: string, e: Omit<Expense, 'id'>) => {
     console.error("Add Expense Error:", error);
     throw error;
   }
+
+  const logMsg = e.category === 'Payment' 
+    ? `Settlement of ₹${e.amount} recorded` 
+    : `Expense "${e.description}" (₹${e.amount}) added`;
+  await logActivity(eventId, logMsg);
+
   return data?.[0] || null;
 };
 
 /**
  * Updates an existing expense
  */
-export const updateExpense = async (id: string, e: Partial<Expense>) => {
+export const updateExpense = async (id: string, e: Partial<Expense>, eventId?: string) => {
   const payload: any = {};
   if (e.description) payload.description = e.description;
   if (e.amount !== undefined) payload.amount = e.amount;
@@ -173,18 +221,26 @@ export const updateExpense = async (id: string, e: Partial<Expense>) => {
     console.error("Update Expense Error:", error);
     throw error;
   }
+
+  if (eventId) {
+    await logActivity(eventId, `Expense "${e.description || 'updated item'}" was modified`);
+  }
 };
 
 /**
  * Deletes an expense by ID
  */
-export const deleteExpense = async (id: string) => {
+export const deleteExpense = async (id: string, eventId?: string, desc?: string) => {
   const { error } = await supabase.from('expenses').delete().eq('id', id);
-  if (error) console.error("Delete Expense Error:", error);
+  if (error) {
+    console.error("Delete Expense Error:", error);
+  } else if (eventId) {
+    await logActivity(eventId, `Expense "${desc || 'item'}" was deleted`);
+  }
 };
 
 /**
- * Listens for real-time changes to participants or expenses for a specific event
+ * Listens for real-time changes to participants, expenses, or activity_log for a specific event
  */
 export const subscribeToChanges = (eventId: string, onUpdate: () => void) => {
   const channel = supabase.channel(`event-realtime-${eventId}`)
@@ -196,6 +252,11 @@ export const subscribeToChanges = (eventId: string, onUpdate: () => void) => {
     .on(
       'postgres_changes', 
       { event: '*', schema: 'public', table: 'expenses', filter: `event_id=eq.${eventId}` }, 
+      onUpdate
+    )
+    .on(
+      'postgres_changes', 
+      { event: '*', schema: 'public', table: 'activity_log', filter: `event_id=eq.${eventId}` }, 
       onUpdate
     )
     .subscribe();
