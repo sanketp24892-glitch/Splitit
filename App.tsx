@@ -331,17 +331,16 @@ const App: React.FC = () => {
                 <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
                   <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center lg:text-left">Recent Activity</h3>
                   <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-hide">
-                    {activeEvent.expenses.length === 0 ? (
+                    {activeEvent.expenses.filter(ex => ex.category !== 'Payment').length === 0 ? (
                       <div className="text-center py-10 text-slate-200 font-black text-[10px] uppercase">No activity yet</div>
                     ) : (
-                      activeEvent.expenses.sort((a,b)=>b.date-a.date).map(e => (
-                        <div key={e.id} onClick={() => setSelectedExpense(e)} className={`p-4 rounded-2xl border transition-all cursor-pointer ${e.category==='Payment'?'bg-green-50/50 border-green-100 italic':'bg-white border-slate-50 hover:border-indigo-100'}`}>
+                      activeEvent.expenses.filter(ex => ex.category !== 'Payment').sort((a,b)=>b.date-a.date).map(e => (
+                        <div key={e.id} onClick={() => setSelectedExpense(e)} className={`p-4 rounded-2xl border transition-all cursor-pointer bg-white border-slate-50 hover:border-indigo-100`}>
                           <div className="flex justify-between items-center gap-2">
                             <div className="min-w-0 flex-1">
                               <p className="font-black text-slate-800 text-sm truncate">{e.description}</p>
                               <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
-                                {activeEvent.participants.find(p=>p.id===e.payerId)?.name || 'Member'} paid {e.category === 'Payment' ? 'to settle' : ''}
-                                {e.proofUrl && <span className="ml-2 text-indigo-500"><i className="fa-solid fa-paperclip text-[8px]"></i> PROOF</span>}
+                                {activeEvent.participants.find(p=>p.id===e.payerId)?.name || 'Member'} paid
                               </p>
                             </div>
                             <p className="font-black text-slate-900 text-sm whitespace-nowrap">₹{Number(e.amount).toFixed(0)}</p>
@@ -375,10 +374,11 @@ const App: React.FC = () => {
               participants={activeEvent.participants} 
               balances={balances} 
               settlements={settlements} 
+              expenses={activeEvent.expenses}
               totalSpent={totalSpent} 
-              onSettle={async (f, t, a, proof) => {
+              onSettle={async (f, t, a, desc, proof) => {
                 await db.addExpense(activeEvent.id, { 
-                  description: `Manual Settlement`, 
+                  description: desc, 
                   amount: a, 
                   payerId: f, 
                   participantIds: [t], 

@@ -1,16 +1,17 @@
 
-import React, { useState, useRef } from 'react';
-import { Participant, Settlement, Balance } from '../types.ts';
+import React, { useState, useRef, useMemo } from 'react';
+import { Participant, Settlement, Balance, Expense } from '../types.ts';
 
 interface Props {
   participants: Participant[];
   balances: Balance[];
   settlements: Settlement[];
+  expenses: Expense[];
   totalSpent: number;
-  onSettle: (fromId: string, toId: string, amount: number, proof?: string) => void;
+  onSettle: (fromId: string, toId: string, amount: number, description: string, proof?: string) => void;
 }
 
-const SettlementView: React.FC<Props> = ({ participants, balances, settlements, totalSpent, onSettle }) => {
+const SettlementView: React.FC<Props> = ({ participants, balances, settlements, expenses, totalSpent, onSettle }) => {
   const [paymentModal, setPaymentModal] = useState<{ settlement: Settlement; show: boolean } | null>(null);
   const [manualConfirmModal, setManualConfirmModal] = useState<Settlement | null>(null);
   const [screenshot, setScreenshot] = useState<string | null>(null);
@@ -20,6 +21,12 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
 
   const getParticipant = (id: string) => participants.find(p => p.id === id);
   const getParticipantName = (id: string) => getParticipant(id)?.name || 'Member';
+
+  const settlementHistory = useMemo(() => {
+    return expenses
+      .filter(e => e.category === 'Payment')
+      .sort((a, b) => b.date - a.date);
+  }, [expenses]);
 
   const handleWhatsAppReminder = (s: Settlement) => {
     const payer = getParticipant(s.from);
@@ -40,6 +47,11 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
       return;
     }
     const link = `upi://pay?pa=${upi}&pn=${encodeURIComponent(payee?.name || 'User')}&am=${paymentModal.settlement.amount.toFixed(2)}&cu=INR`;
+    
+    // Record as online settlement
+    onSettle(paymentModal.settlement.from, paymentModal.settlement.to, paymentModal.settlement.amount, "Online Payment");
+    
+    setPaymentModal(null);
     window.location.href = link;
   };
 
@@ -56,7 +68,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
 
   const confirmManualSettle = () => {
     if (manualConfirmModal && screenshot) {
-      onSettle(manualConfirmModal.from, manualConfirmModal.to, manualConfirmModal.amount, screenshot);
+      onSettle(manualConfirmModal.from, manualConfirmModal.to, manualConfirmModal.amount, "Manual Settlement", screenshot);
       setManualConfirmModal(null);
       setScreenshot(null);
     }
@@ -130,29 +142,29 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in">
           <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl p-8 space-y-6">
             <div className="text-center space-y-2">
-              <h3 className="text-xl font-black">Confirm Settlement</h3>
+              <h3 className="text-xl font-black">Manual Settlement</h3>
               <p className="text-xs text-slate-500 font-medium leading-relaxed">
                 Recording settlement of <strong>₹{manualConfirmModal.amount.toFixed(0)}</strong> from <strong>{getParticipantName(manualConfirmModal.from)}</strong> to <strong>{getParticipantName(manualConfirmModal.to)}</strong>.
               </p>
             </div>
 
             <div className="space-y-4">
-              <label className="block text-center cursor-pointer">
-                <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
+              <div className="space-y-2">
+                <input type="file" accept="image/*" className="hidden" id="manual-screenshot" ref={fileInputRef} onChange={handleFileChange} />
                 {screenshot ? (
                   <div className="relative group mx-auto w-32 h-32 rounded-2xl overflow-hidden border-2 border-indigo-600 shadow-md">
                     <img src={screenshot} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center" onClick={() => fileInputRef.current?.click()}>
+                    <button onClick={() => fileInputRef.current?.click()} className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <i className="fa-solid fa-camera text-white"></i>
-                    </div>
+                    </button>
                   </div>
                 ) : (
-                  <div className="mx-auto w-full py-10 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center gap-2 hover:bg-slate-100 transition-all" onClick={() => fileInputRef.current?.click()}>
+                  <button onClick={() => fileInputRef.current?.click()} className="w-full py-10 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center gap-2 hover:bg-slate-100 transition-all">
                     <i className="fa-solid fa-upload text-slate-400 text-xl"></i>
                     <span className="text-[10px] font-black uppercase text-slate-400">Upload Screenshot*</span>
-                  </div>
+                  </button>
                 )}
-              </label>
+              </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => {setManualConfirmModal(null); setScreenshot(null);}} className="py-4 bg-slate-100 text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest">Cancel</button>
@@ -216,6 +228,52 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Outstanding</span>
             <span className="text-2xl font-black text-indigo-400 tracking-tighter">₹{settlements.reduce((acc, curr) => acc + curr.amount, 0).toFixed(0)}</span>
           </div>
+        </div>
+      </div>
+
+      {/* Settlement History Section */}
+      <div className="bg-white rounded-[2.5rem] p-8 sm:p-10 border border-slate-100 shadow-sm space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
+            <i className="fa-solid fa-clock-rotate-left"></i>
+          </div>
+          <div>
+            <h2 className="text-lg font-black tracking-tight">Settlement History</h2>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Past Transactions</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {settlementHistory.length === 0 ? (
+            <div className="text-center py-10 text-slate-300 font-bold uppercase text-[9px]">No settlements recorded yet</div>
+          ) : (
+            settlementHistory.map((h) => (
+              <div key={h.id} className="flex items-center justify-between p-5 bg-slate-50 rounded-2xl border border-slate-100 hover:border-indigo-100 transition-all">
+                <div className="flex items-center gap-4 min-w-0">
+                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm ${h.description.includes('Manual') ? 'bg-orange-50 text-orange-500' : 'bg-indigo-50 text-indigo-500'}`}>
+                     <i className={h.description.includes('Manual') ? "fa-solid fa-camera" : "fa-solid fa-mobile-screen"}></i>
+                   </div>
+                   <div className="min-w-0">
+                      <p className="text-xs font-black uppercase tracking-tight truncate">
+                        {getParticipantName(h.payerId)} → {getParticipantName(h.participantIds[0])}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{h.description}</span>
+                        {h.proofUrl && (
+                          <button onClick={() => window.open(h.proofUrl, '_blank')} className="text-[8px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md hover:bg-indigo-100">
+                             <i className="fa-solid fa-paperclip mr-1"></i>VIEW PROOF
+                          </button>
+                        )}
+                      </div>
+                   </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-black text-slate-900">₹{h.amount.toFixed(0)}</p>
+                  <p className="text-[8px] font-bold text-slate-300 uppercase">{new Date(h.date).toLocaleDateString()}</p>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
