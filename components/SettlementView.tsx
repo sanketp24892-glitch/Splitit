@@ -15,6 +15,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
   const [paymentModal, setPaymentModal] = useState<{ settlement: Settlement; show: boolean } | null>(null);
   const [manualConfirmModal, setManualConfirmModal] = useState<Settlement | null>(null);
   const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [manualComment, setManualComment] = useState('');
   const [showUpiInput, setShowUpiInput] = useState(false);
   const [manualUpi, setManualUpi] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -50,7 +51,6 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
     
     setIsProcessing(true);
     try {
-      // Record as online settlement
       await onSettle(paymentModal.settlement.from, paymentModal.settlement.to, paymentModal.settlement.amount, "Online Payment");
       const link = `upi://pay?pa=${upi}&pn=${encodeURIComponent(payee?.name || 'User')}&am=${paymentModal.settlement.amount.toFixed(2)}&cu=INR`;
       setPaymentModal(null);
@@ -65,10 +65,9 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // 1MB = 1024 * 1024 bytes
       if (file.size > 1024 * 1024) {
         alert("File is too large. Please select a screenshot smaller than 1MB.");
-        e.target.value = ''; // Reset input
+        e.target.value = '';
         return;
       }
       const reader = new FileReader();
@@ -80,15 +79,23 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
   };
 
   const confirmManualSettle = async () => {
-    if (manualConfirmModal && screenshot && !isProcessing) {
+    if (manualConfirmModal && !isProcessing) {
+      const hasProof = !!screenshot || !!manualComment.trim();
+      if (!hasProof) {
+        alert("Please provide either a screenshot or a comment.");
+        return;
+      }
+
       setIsProcessing(true);
       try {
-        await onSettle(manualConfirmModal.from, manualConfirmModal.to, manualConfirmModal.amount, "Manual Settlement", screenshot);
+        const desc = manualComment.trim() ? `Manual: ${manualComment.trim()}` : "Manual Settlement";
+        await onSettle(manualConfirmModal.from, manualConfirmModal.to, manualConfirmModal.amount, desc, screenshot || undefined);
         setManualConfirmModal(null);
         setScreenshot(null);
+        setManualComment('');
       } catch (err) {
         console.error("Manual settlement error:", err);
-        alert("Failed to record settlement. Please try a smaller image.");
+        alert("Failed to record settlement.");
       } finally {
         setIsProcessing(false);
       }
@@ -149,7 +156,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                       <button onClick={() => {setPaymentModal({settlement: s, show: true}); setShowUpiInput(false);}} className="bg-indigo-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-100 active:scale-95 transition-all">Make Payment</button>
                       <button onClick={() => handleWhatsAppReminder(s)} className="bg-green-50 text-green-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-green-100 active:scale-95">WhatsApp</button>
                     </div>
-                    <button onClick={() => setManualConfirmModal(s)} className="w-full py-3.5 bg-slate-50 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-dashed border-slate-200 hover:bg-slate-100 transition-all">Settle Manually</button>
+                    <button onClick={() => {setManualConfirmModal(s); setManualComment(''); setScreenshot(null);}} className="w-full py-3.5 bg-slate-50 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-dashed border-slate-200 hover:bg-slate-100 transition-all">Settle Manually</button>
                   </div>
                 </div>
               );
@@ -158,7 +165,6 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         )}
       </div>
 
-      {/* Manual Settlement Confirmation Modal */}
       {manualConfirmModal && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in">
           <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl p-8 space-y-6">
@@ -182,19 +188,29 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                     )}
                   </div>
                 ) : (
-                  <button onClick={() => fileInputRef.current?.click()} className="w-full py-10 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center gap-2 hover:bg-slate-100 transition-all">
-                    <i className="fa-solid fa-upload text-slate-400 text-xl"></i>
-                    <span className="text-[10px] font-black uppercase text-slate-400">Upload Screenshot*</span>
+                  <button onClick={() => fileInputRef.current?.click()} className="w-full py-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center gap-2 hover:bg-slate-100 transition-all">
+                    <i className="fa-solid fa-upload text-slate-400 text-lg"></i>
+                    <span className="text-[10px] font-black uppercase text-slate-400">Upload Screenshot</span>
                   </button>
                 )}
               </div>
 
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-300 px-1">OR ADD A COMMENT</label>
+                <textarea 
+                  value={manualComment}
+                  onChange={(e) => setManualComment(e.target.value)}
+                  placeholder="e.g. Paid in cash, Settle via GPay..."
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-bold focus:outline-none focus:border-indigo-600 focus:bg-white transition-all min-h-[80px] resize-none"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
-                <button disabled={isProcessing} onClick={() => {setManualConfirmModal(null); setScreenshot(null);}} className="py-4 bg-slate-100 text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50">Cancel</button>
+                <button disabled={isProcessing} onClick={() => {setManualConfirmModal(null); setScreenshot(null); setManualComment('');}} className="py-4 bg-slate-100 text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest disabled:opacity-50">Cancel</button>
                 <button 
-                  disabled={!screenshot || isProcessing}
+                  disabled={(!screenshot && !manualComment.trim()) || isProcessing}
                   onClick={confirmManualSettle} 
-                  className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${screenshot ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 text-slate-300 border border-slate-100'}`}
+                  className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${(screenshot || manualComment.trim()) ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 text-slate-300 border border-slate-100'}`}
                 >
                   {isProcessing ? <i className="fa-solid fa-spinner animate-spin"></i> : "Confirm"}
                 </button>
@@ -254,7 +270,6 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         </div>
       </div>
 
-      {/* Settlement History Section */}
       <div className="bg-white rounded-[2.5rem] p-8 sm:p-10 border border-slate-100 shadow-sm space-y-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
@@ -281,7 +296,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                         {getParticipantName(h.payerId)} → {getParticipantName(h.participantIds[0])}
                       </p>
                       <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{h.description}</span>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter truncate max-w-[150px]">{h.description}</span>
                         {h.proofUrl && (
                           <button onClick={() => {
                             const w = window.open();
