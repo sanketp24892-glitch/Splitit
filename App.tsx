@@ -342,27 +342,44 @@ const App: React.FC = () => {
                 />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Recent Activity List */}
+                  {/* Transactions List */}
                   <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm flex flex-col">
-                    <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center lg:text-left">Recent Activity</h3>
-                    <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-hide flex-1">
-                      {activeEvent.expenses.filter(ex => ex.category !== 'Payment').length === 0 ? (
-                        <div className="text-center py-10 text-slate-200 font-black text-[10px] uppercase">No activity yet</div>
-                      ) : (
-                        activeEvent.expenses.filter(ex => ex.category !== 'Payment').sort((a,b)=>b.date-a.date).map(e => (
-                          <div key={e.id} onClick={() => setSelectedExpense(e)} className={`p-4 rounded-2xl border transition-all cursor-pointer bg-white border-slate-50 hover:border-indigo-100`}>
-                            <div className="flex justify-between items-center gap-2">
-                              <div className="min-w-0 flex-1">
-                                <p className="font-black text-slate-800 text-sm truncate">{e.description}</p>
-                                <p className="text-[9px] text-slate-400 font-bold tracking-tighter">
-                                  {activeEvent.participants.find(p=>p.id===e.payerId)?.name || 'member'} paid
-                                </p>
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center lg:text-left">Transactions</h3>
+                    
+                    <div className="flex-1 flex flex-col min-w-0">
+                      {/* Grid Header */}
+                      <div className="grid grid-cols-4 gap-2 px-2 mb-3 border-b border-slate-50 pb-2">
+                        <span className="text-[8px] font-black text-slate-300 uppercase">Category</span>
+                        <span className="text-[8px] font-black text-slate-300 uppercase">Paid By</span>
+                        <span className="text-[8px] font-black text-slate-300 uppercase text-center">Amount</span>
+                        <span className="text-[8px] font-black text-slate-300 uppercase text-right">Split Among</span>
+                      </div>
+
+                      <div className="space-y-2 max-h-[350px] overflow-y-auto scrollbar-hide">
+                        {activeEvent.expenses.length === 0 ? (
+                          <div className="text-center py-10 text-slate-200 font-black text-[10px] uppercase">No transactions yet</div>
+                        ) : (
+                          [...activeEvent.expenses].sort((a,b)=>b.date-a.date).map(e => {
+                            const payer = activeEvent.participants.find(p => p.id === e.payerId)?.name || 'member';
+                            const splitAmong = e.participantIds.length === activeEvent.participants.length 
+                              ? 'All' 
+                              : e.participantIds.map(id => activeEvent.participants.find(p => p.id === id)?.name).join(', ');
+
+                            return (
+                              <div 
+                                key={e.id} 
+                                onClick={() => setSelectedExpense(e)} 
+                                className="grid grid-cols-4 gap-2 p-3 rounded-xl border border-slate-50 hover:border-indigo-100 transition-all cursor-pointer items-center bg-white"
+                              >
+                                <span className="text-[9px] font-bold text-slate-500 uppercase truncate tracking-tighter">{e.category}</span>
+                                <span className="text-[10px] font-black text-slate-800 truncate">{payer}</span>
+                                <span className="text-[10px] font-black text-indigo-600 text-center">₹{Number(e.amount).toFixed(0)}</span>
+                                <span className="text-[9px] font-medium text-slate-400 text-right truncate">{splitAmong}</span>
                               </div>
-                              <p className="font-black text-slate-900 text-sm whitespace-nowrap">₹{Number(e.amount).toFixed(0)}</p>
-                            </div>
-                          </div>
-                        ))
-                      )}
+                            );
+                          })
+                        )}
+                      </div>
                     </div>
                   </div>
 
