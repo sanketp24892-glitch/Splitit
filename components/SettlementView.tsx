@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Participant, Settlement, Balance } from '../types.ts';
 
 interface Props {
@@ -12,8 +12,11 @@ interface Props {
 
 const SettlementView: React.FC<Props> = ({ participants, balances, settlements, totalSpent, onSettle }) => {
   const [paymentModal, setPaymentModal] = useState<{ settlement: Settlement; show: boolean } | null>(null);
+  const [manualConfirmModal, setManualConfirmModal] = useState<Settlement | null>(null);
+  const [screenshot, setScreenshot] = useState<string | null>(null);
   const [showUpiInput, setShowUpiInput] = useState(false);
   const [manualUpi, setManualUpi] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getParticipant = (id: string) => participants.find(p => p.id === id);
   const getParticipantName = (id: string) => getParticipant(id)?.name || 'Member';
@@ -38,6 +41,25 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
     }
     const link = `upi://pay?pa=${upi}&pn=${encodeURIComponent(payee?.name || 'User')}&am=${paymentModal.settlement.amount.toFixed(2)}&cu=INR`;
     window.location.href = link;
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setScreenshot(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const confirmManualSettle = () => {
+    if (manualConfirmModal && screenshot) {
+      onSettle(manualConfirmModal.from, manualConfirmModal.to, manualConfirmModal.amount);
+      setManualConfirmModal(null);
+      setScreenshot(null);
+    }
   };
 
   return (
@@ -94,7 +116,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                       <button onClick={() => {setPaymentModal({settlement: s, show: true}); setShowUpiInput(false);}} className="bg-indigo-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-100 active:scale-95 transition-all">Make Payment</button>
                       <button onClick={() => handleWhatsAppReminder(s)} className="bg-green-50 text-green-600 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-green-100 active:scale-95">WhatsApp</button>
                     </div>
-                    <button onClick={() => onSettle(s.from, s.to, s.amount)} className="w-full py-3.5 bg-slate-50 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-dashed border-slate-200 hover:bg-slate-100 transition-all">Settle Manually</button>
+                    <button onClick={() => setManualConfirmModal(s)} className="w-full py-3.5 bg-slate-50 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest border border-dashed border-slate-200 hover:bg-slate-100 transition-all">Settle Manually</button>
                   </div>
                 </div>
               );
@@ -102,6 +124,50 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
           </div>
         )}
       </div>
+
+      {/* Manual Settlement Confirmation Modal */}
+      {manualConfirmModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in">
+          <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl p-8 space-y-6">
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-black">Confirm Settlement</h3>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Recording settlement of <strong>₹{manualConfirmModal.amount.toFixed(0)}</strong> from <strong>{getParticipantName(manualConfirmModal.from)}</strong> to <strong>{getParticipantName(manualConfirmModal.to)}</strong>.
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <label className="block text-center cursor-pointer">
+                <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
+                {screenshot ? (
+                  <div className="relative group mx-auto w-32 h-32 rounded-2xl overflow-hidden border-2 border-indigo-600 shadow-md">
+                    <img src={screenshot} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center" onClick={() => fileInputRef.current?.click()}>
+                      <i className="fa-solid fa-camera text-white"></i>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mx-auto w-full py-10 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center gap-2 hover:bg-slate-100 transition-all" onClick={() => fileInputRef.current?.click()}>
+                    <i className="fa-solid fa-upload text-slate-400 text-xl"></i>
+                    <span className="text-[10px] font-black uppercase text-slate-400">Upload Screenshot*</span>
+                  </div>
+                )}
+              </label>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => {setManualConfirmModal(null); setScreenshot(null);}} className="py-4 bg-slate-100 text-slate-900 rounded-2xl font-black text-[10px] uppercase tracking-widest">Cancel</button>
+                <button 
+                  disabled={!screenshot}
+                  onClick={confirmManualSettle} 
+                  className={`py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${screenshot ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-slate-50 text-slate-300 border border-slate-100'}`}
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Summary Report Section */}
       <div className="bg-slate-900 text-white rounded-[2.5rem] p-8 sm:p-10 shadow-2xl relative overflow-hidden">
