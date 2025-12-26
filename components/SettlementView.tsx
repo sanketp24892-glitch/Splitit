@@ -40,12 +40,24 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
+  const handlePayNow = (s: Settlement) => {
+    const receiver = getParticipant(s.to);
+    if (receiver?.upiId) {
+      const link = `upi://pay?pa=${receiver.upiId}&pn=${encodeURIComponent(receiver.name)}&am=${s.amount.toFixed(2)}&cu=INR`;
+      window.location.href = link;
+    } else {
+      setPaymentModal({ settlement: s, show: true });
+      setShowUpiInput(true);
+      setManualUpi('');
+    }
+  };
+
   const openUpiApp = () => {
     if (!paymentModal) return;
     const payee = getParticipant(paymentModal.settlement.to);
     const upi = manualUpi || payee?.upiId;
     if (!upi) {
-      setShowUpiInput(true);
+      alert("Please enter a valid UPI ID");
       return;
     }
     
@@ -80,7 +92,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
 
       setIsProcessing(true);
       try {
-        const desc = manualComment.trim() ? `Manual: ${manualComment.trim()}` : "Manual Settlement";
+        const desc = manualComment.trim() ? `Manual: ${manualComment.trim()}` : "Settle payment";
         await onSettle(manualConfirmModal.from, manualConfirmModal.to, manualConfirmModal.amount, desc, screenshot || undefined);
         setManualConfirmModal(null);
         setScreenshot(null);
@@ -113,7 +125,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
               <i className="fa-solid fa-check"></i>
             </div>
             <h3 className="text-xl font-black text-slate-800">You're All Settled!</h3>
-            <p className="text-sm font-medium text-slate-400 mt-2">Everyone has paid their share. Time for the next trip?</p>
+            <p className="text-sm font-medium text-slate-400 mt-2">Everyone has paid their share.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -121,7 +133,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
               const payer = getParticipant(s.from);
               const receiver = getParticipant(s.to);
               return (
-                <div key={idx} className="bg-white rounded-[2.5rem] p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col relative overflow-hidden group">
+                <div key={idx} className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col relative overflow-hidden group">
                   <div className="flex justify-between items-start mb-6">
                     <div className="space-y-3 flex-1 min-w-0 pr-4">
                       <div className="flex items-center gap-3">
@@ -134,7 +146,7 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-0.5">Total Amount</p>
+                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-0.5">Owes</p>
                       <h3 className="text-3xl font-black text-slate-900 tracking-tighter">₹{s.amount.toFixed(0)}</h3>
                     </div>
                   </div>
@@ -142,11 +154,11 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                   <div className="flex flex-col gap-2">
                     <div className="flex gap-2">
                       <button 
-                        onClick={() => {setPaymentModal({settlement: s, show: true}); setShowUpiInput(false);}} 
+                        onClick={() => handlePayNow(s)} 
                         className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-indigo-100/50 flex items-center justify-center gap-2"
                       >
-                        <i className="fa-solid fa-bolt-lightning"></i>
-                        Pay Now
+                        <i className="fa-solid fa-bolt-lightning text-[10px]"></i>
+                        Pay now
                       </button>
                       <button 
                         onClick={() => handleWhatsAppReminder(s)} 
@@ -175,10 +187,11 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in">
           <div className="bg-white rounded-[2.5rem] max-w-sm w-full shadow-2xl p-8 space-y-6">
             <div className="text-center space-y-2">
-              <h3 className="text-xl font-black">Record Settle Payment</h3>
+              <h3 className="text-xl font-black uppercase tracking-tight">Settle Payment</h3>
               <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Confirming settlement of <strong>₹{manualConfirmModal.amount.toFixed(0)}</strong> from <strong>{getParticipantName(manualConfirmModal.from)}</strong> to <strong>{getParticipantName(manualConfirmModal.to)}</strong>.
+                Confirm settlement of <strong>₹{manualConfirmModal.amount.toFixed(0)}</strong> from <strong>{getParticipantName(manualConfirmModal.from)}</strong> to <strong>{getParticipantName(manualConfirmModal.to)}</strong>.
               </p>
+              <p className="text-[10px] font-black text-indigo-500 uppercase">Screenshot or comment is mandatory</p>
             </div>
 
             <div className="space-y-4">
@@ -196,17 +209,17 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
                 ) : (
                   <button onClick={() => fileInputRef.current?.click()} className="w-full py-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex flex-col items-center gap-2 hover:bg-slate-100 transition-all">
                     <i className="fa-solid fa-upload text-slate-400 text-lg"></i>
-                    <span className="text-[10px] font-black uppercase text-slate-400">Upload Screenshot</span>
+                    <span className="text-[10px] font-black uppercase text-slate-400">Upload Attachment</span>
                   </button>
                 )}
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-300 px-1">COMMENT (OPTIONAL)</label>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-300 px-1">OR ADD A COMMENT</label>
                 <textarea 
                   value={manualComment}
                   onChange={(e) => setManualComment(e.target.value)}
-                  placeholder="Paid via UPI, Cash, etc."
+                  placeholder="e.g. Paid via UPI, Cash, etc."
                   className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-bold focus:outline-none focus:border-indigo-600 focus:bg-white transition-all min-h-[80px] resize-none"
                 />
               </div>
@@ -323,34 +336,17 @@ const SettlementView: React.FC<Props> = ({ participants, balances, settlements, 
             </div>
             
             <div className="p-8 space-y-3">
-              {!showUpiInput ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <button onClick={openUpiApp} className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-50 rounded-2xl border border-slate-100 active:scale-95 transition-all hover:bg-slate-100">
-                    <div className="text-3xl text-slate-900"><i className="fa-brands fa-google-pay"></i></div>
-                    <span className="text-[9px] font-black uppercase text-slate-500">Google Pay</span>
-                  </button>
-                  <button onClick={openUpiApp} className="flex flex-col items-center justify-center gap-3 p-6 bg-slate-50 rounded-2xl border border-slate-100 active:scale-95 transition-all hover:bg-slate-100">
-                    <div className="text-3xl text-purple-600"><i className="fa-solid fa-mobile-screen-button"></i></div>
-                    <span className="text-[9px] font-black uppercase text-slate-500">PhonePe</span>
-                  </button>
-                  <button onClick={() => setShowUpiInput(true)} className="col-span-2 flex items-center justify-center gap-3 py-5 bg-indigo-50 rounded-2xl border border-indigo-100 active:scale-95 transition-all">
-                    <div className="text-xl text-indigo-600"><i className="fa-solid fa-at"></i></div>
-                    <span className="text-[10px] font-black uppercase text-indigo-600">Enter UPI ID</span>
-                  </button>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-300 px-1">Recipient VPA</label>
+                  <input type="text" autoFocus value={manualUpi} onChange={e => setManualUpi(e.target.value)} placeholder="username@upi" className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-bold outline-none" />
                 </div>
-              ) : (
-                <div className="space-y-4 animate-in">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-300 px-1">Recipient VPA</label>
-                    <input type="text" autoFocus value={manualUpi} onChange={e => setManualUpi(e.target.value)} placeholder="username@upi" className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-bold outline-none" />
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => setShowUpiInput(false)} className="flex-1 py-5 bg-slate-100 rounded-2xl font-black text-[10px] uppercase tracking-widest">Back</button>
-                    <button onClick={openUpiApp} className="flex-[2] py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg">Proceed</button>
-                  </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setPaymentModal(null)} className="flex-1 py-5 bg-slate-100 rounded-2xl font-black text-[10px] uppercase tracking-widest">Cancel</button>
+                  <button onClick={openUpiApp} className="flex-[2] py-5 bg-indigo-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg">Proceed to Apps</button>
                 </div>
-              )}
-              <button onClick={() => setPaymentModal(null)} className="w-full pt-6 text-[10px] font-black text-slate-300 uppercase tracking-widest text-center hover:text-slate-500 transition-colors">Close</button>
+              </div>
+              <p className="text-[9px] text-center text-slate-400 font-bold uppercase py-2">Device will show available UPI apps after you click proceed</p>
             </div>
           </div>
         </div>
