@@ -354,7 +354,7 @@ const App: React.FC = () => {
                             <div className="flex justify-between items-center gap-2">
                               <div className="min-w-0 flex-1">
                                 <p className="font-black text-slate-800 text-sm truncate">{e.description}</p>
-                                <p className="text-[9px] text-slate-400 font-bold lowercase tracking-tighter">
+                                <p className="text-[9px] text-slate-400 font-bold tracking-tighter">
                                   {activeEvent.participants.find(p=>p.id===e.payerId)?.name || 'member'} paid
                                 </p>
                               </div>

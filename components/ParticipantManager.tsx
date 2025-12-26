@@ -104,7 +104,7 @@ const ParticipantManager: React.FC<Props> = ({ participants, onAdd, onRemove }) 
                   {editingId === p.id ? (
                     <div className="flex flex-col gap-1 flex-1 pr-2">
                       <input 
-                        className="text-xs font-bold border-b border-indigo-200 outline-none bg-transparent lowercase"
+                        className="text-xs font-bold border-b border-indigo-200 outline-none bg-transparent"
                         value={editName}
                         onChange={e => setEditName(e.target.value)}
                         autoFocus
@@ -118,7 +118,7 @@ const ParticipantManager: React.FC<Props> = ({ participants, onAdd, onRemove }) 
                     </div>
                   ) : (
                     <div className="min-w-0">
-                      <p className="font-black text-sm text-[#1e293b] truncate leading-tight lowercase tracking-tight">{p.name}</p>
+                      <p className="font-black text-sm text-[#1e293b] truncate leading-tight tracking-tight">{p.name}</p>
                       {p.upiId && <p className="text-[9px] text-slate-400 font-bold truncate tracking-tight">{p.upiId}</p>}
                     </div>
                   )}
