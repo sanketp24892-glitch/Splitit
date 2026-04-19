@@ -462,7 +462,7 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm mt-8">
-                  <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center lg:text-left">Category Summary</h3>
+                  <h3 className="text-[10px] font-black text-slate-400 mb-6 text-center lg:text-left">Expense Summary - {activeEvent.name}</h3>
                   <div className="space-y-2">
                     <div className="grid grid-cols-2 px-2 mb-3 border-b border-slate-50 pb-2">
                       <span className="text-[8px] font-black text-slate-300 uppercase">Category</span>

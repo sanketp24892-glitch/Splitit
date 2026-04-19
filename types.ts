@@ -13,7 +13,7 @@ export interface Expense {
   payerId: string;
   participantIds: string[];
   date: number;
-  category: 'Food' | 'Transport' | 'Lodging' | 'Entertainment' | 'Payment' | 'Other';
+  category: 'Food' | 'Fuel' | 'Lodging' | 'Entertainment' | 'Payment' | 'Other';
   proofUrl?: string;
 }
 

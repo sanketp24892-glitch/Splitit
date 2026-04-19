@@ -4,7 +4,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 export interface ParsedReceipt {
   description: string;
   amount: number;
-  category: 'Food' | 'Transport' | 'Lodging' | 'Entertainment' | 'Other';
+  category: 'Food' | 'Fuel' | 'Lodging' | 'Entertainment' | 'Other';
 }
 
 export const parseReceipt = async (base64Image: string): Promise<ParsedReceipt | null> => {
@@ -16,7 +16,7 @@ export const parseReceipt = async (base64Image: string): Promise<ParsedReceipt |
       model: 'gemini-3-flash-preview',
       contents: {
         parts: [
-          { text: "Extract the following details from this receipt image: description (brief, e.g., 'Lunch at Mario's'), total amount (numeric), and the most suitable category from: Food, Transport, Lodging, Entertainment, Other." },
+          { text: "Extract the following details from this receipt image: description (brief, e.g., 'Lunch at Mario's'), total amount (numeric), and the most suitable category from: Food, Fuel, Lodging, Entertainment, Other." },
           {
             inlineData: {
               mimeType: "image/jpeg",
@@ -34,7 +34,7 @@ export const parseReceipt = async (base64Image: string): Promise<ParsedReceipt |
             amount: { type: Type.NUMBER },
             category: { 
               type: Type.STRING,
-              description: "Must be one of: Food, Transport, Lodging, Entertainment, Other"
+              description: "Must be one of: Food, Fuel, Lodging, Entertainment, Other"
             }
           },
           required: ["description", "amount", "category"]

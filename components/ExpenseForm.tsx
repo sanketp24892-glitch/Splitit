@@ -182,7 +182,7 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd, onUpdate, editingEx
               className="w-full px-4 py-3.5 sm:py-4 rounded-xl bg-slate-50 border border-slate-100 focus:outline-none focus:border-[#4f46e5] focus:bg-white text-sm appearance-none cursor-pointer transition-all"
             >
               <option value="Food">Food</option>
-              <option value="Transport">Transport</option>
+              <option value="Fuel">Fuel</option>
               <option value="Lodging">Lodging</option>
               <option value="Entertainment">Entertainment</option>
               <option value="Other">Other</option>
