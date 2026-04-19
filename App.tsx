@@ -397,7 +397,7 @@ const App: React.FC = () => {
                     <div className="flex-1 flex flex-col min-w-0">
                       {/* Grid Header */}
                       <div className="grid grid-cols-4 gap-2 px-2 mb-3 border-b border-slate-50 pb-2">
-                        <span className="text-[8px] font-black text-slate-300 uppercase">Category</span>
+                        <span className="text-[8px] font-black text-slate-300 uppercase">Description</span>
                         <span className="text-[8px] font-black text-slate-300 uppercase">Paid By</span>
                         <span className="text-[8px] font-black text-slate-300 uppercase text-center">Amount</span>
                         <span className="text-[8px] font-black text-slate-300 uppercase text-right">Split Among</span>
@@ -419,7 +419,7 @@ const App: React.FC = () => {
                                 onClick={() => setSelectedExpense(e)} 
                                 className="grid grid-cols-4 gap-2 p-3 rounded-xl border border-slate-50 hover:border-indigo-100 transition-all cursor-pointer items-center bg-white"
                               >
-                                <span className="text-[9px] font-bold text-slate-500 uppercase truncate tracking-tighter">{e.category}</span>
+                                <span className="text-[9px] font-bold text-slate-500 uppercase truncate tracking-tighter">{e.description}</span>
                                 <span className="text-[10px] font-black text-slate-800 truncate">{payer}</span>
                                 <span className="text-[10px] font-black text-indigo-600 text-center">₹{Number(e.amount).toFixed(0)}</span>
                                 <span className="text-[9px] font-medium text-slate-400 text-right leading-tight">{splitAmong}</span>

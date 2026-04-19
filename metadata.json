@@ -3,5 +3,6 @@
   "description": "A smart expense splitting application for groups and events, featuring AI-powered receipt scanning and automated debt settlement in INR.",
   "requestFramePermissions": [
     "camera"
-  ]
+  ],
+  "majorCapabilities": []
 }
