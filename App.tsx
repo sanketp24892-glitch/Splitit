@@ -460,6 +460,40 @@ const App: React.FC = () => {
                     expenses={activeEvent.expenses} 
                   />
                 </div>
+
+                <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm mt-8">
+                  <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-6 text-center lg:text-left">Category Summary</h3>
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 px-2 mb-3 border-b border-slate-50 pb-2">
+                      <span className="text-[8px] font-black text-slate-300 uppercase">Category</span>
+                      <span className="text-[8px] font-black text-slate-300 uppercase text-right">Total Spent</span>
+                    </div>
+                    {Object.entries(
+                      activeEvent.expenses.reduce((acc, curr) => {
+                        if (curr.category !== 'Payment') {
+                          acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
+                        }
+                        return acc;
+                      }, {} as Record<string, number>)
+                    ).length === 0 ? (
+                      <div className="text-center py-6 text-slate-200 font-black text-[10px] uppercase">No categorized expenses</div>
+                    ) : (
+                      Object.entries(
+                        activeEvent.expenses.reduce((acc, curr) => {
+                          if (curr.category !== 'Payment') {
+                            acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
+                          }
+                          return acc;
+                        }, {} as Record<string, number>)
+                      ).map(([cat, total]) => (
+                        <div key={cat} className="grid grid-cols-2 p-3 rounded-xl border border-slate-50 hover:border-indigo-100 transition-all bg-white">
+                          <span className="text-[10px] font-black text-slate-700 uppercase tracking-tighter">{cat}</span>
+                          <span className="text-[10px] font-black text-indigo-600 text-right">₹{total.toFixed(0)}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
                 
                 <div className="pt-8 text-center space-y-1">
                   <p className="text-[10px] font-bold text-slate-400 lowercase tracking-tight italic">

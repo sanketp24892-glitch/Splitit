@@ -60,7 +60,11 @@ const OverviewCharts: React.FC<Props> = ({ participants, expenses }) => {
                   cursor={{ fill: 'transparent' }} 
                   contentStyle={{ borderRadius: '1rem', border: 'none', background: '#1e293b', color: '#fff', fontSize: '9px', fontWeight: 'bold' }} 
                 />
-                <Bar dataKey="value" fill="#4f46e5" radius={[6, 6, 0, 0]} barSize={32} />
+                <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={32}>
+                  {spendingByMember.map((_entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
