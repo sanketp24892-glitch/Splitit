@@ -419,8 +419,8 @@ const App: React.FC = () => {
                                 onClick={() => setSelectedExpense(e)} 
                                 className="grid grid-cols-4 gap-2 p-3 rounded-xl border border-slate-50 hover:border-indigo-100 transition-all cursor-pointer items-center bg-white"
                               >
-                                <span className="text-[9px] font-bold text-slate-500 uppercase truncate tracking-tighter">{e.description}</span>
-                                <span className="text-[10px] font-black text-slate-800 truncate">{payer}</span>
+                                <span className="text-[9px] font-bold text-slate-500 capitalize break-words">{e.description}</span>
+                                <span className="text-[10px] font-black text-slate-800 break-words">{payer}</span>
                                 <span className="text-[10px] font-black text-indigo-600 text-center">₹{Number(e.amount).toFixed(0)}</span>
                                 <span className="text-[9px] font-medium text-slate-400 text-right leading-tight">{splitAmong}</span>
                               </div>
