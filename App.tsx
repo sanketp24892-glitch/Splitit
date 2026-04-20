@@ -481,19 +481,25 @@ const App: React.FC = () => {
                     ).length === 0 ? (
                       <div className="text-center py-6 text-slate-200 font-black text-[10px] uppercase">No categorized expenses</div>
                     ) : (
-                      Object.entries(
-                        activeEvent.expenses.reduce((acc, curr) => {
-                          if (curr.category !== 'Payment') {
-                            acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
-                          }
-                          return acc;
-                        }, {} as Record<string, number>)
-                      ).map(([cat, total]) => (
-                        <div key={cat} className="grid grid-cols-2 p-3 rounded-xl border border-slate-50 hover:border-indigo-100 transition-all bg-white">
-                          <span className="text-[10px] font-black text-slate-700 uppercase tracking-tighter">{cat}</span>
-                          <span className="text-[10px] font-black text-indigo-600 text-right">₹{total.toFixed(0)}</span>
+                      <>
+                        {Object.entries(
+                          activeEvent.expenses.reduce((acc, curr) => {
+                            if (curr.category !== 'Payment') {
+                              acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
+                            }
+                            return acc;
+                          }, {} as Record<string, number>)
+                        ).map(([cat, total]) => (
+                          <div key={cat} className="grid grid-cols-2 p-3 rounded-xl border border-slate-50 hover:border-indigo-100 transition-all bg-white">
+                            <span className="text-[10px] font-black text-slate-700 uppercase tracking-tighter">{cat}</span>
+                            <span className="text-[10px] font-black text-indigo-600 text-right">₹{total.toFixed(0)}</span>
+                          </div>
+                        ))}
+                        <div className="grid grid-cols-2 p-3 mt-4 border-t-2 border-slate-50 bg-slate-50/50 rounded-xl">
+                          <span className="text-[10px] font-black text-slate-900 uppercase">Total</span>
+                          <span className="text-[11px] font-black text-indigo-700 text-right">₹{totalSpent.toFixed(0)}</span>
                         </div>
-                      ))
+                      </>
                     )}
                   </div>
                 </div>
