@@ -22,16 +22,7 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd, onUpdate, editingEx
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleCategoryChange = (val: string) => {
-    if (val === 'Other') {
-      const customName = window.prompt("Enter category name:");
-      if (customName && customName.trim()) {
-        setCategory(customName.trim());
-      } else {
-        setCategory('Other');
-      }
-    } else {
-      setCategory(val as any);
-    }
+    setCategory(val as any);
   };
 
   useEffect(() => {
@@ -201,6 +192,18 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd, onUpdate, editingEx
               <option value="Entertainment">Entertainment</option>
               <option value="Other">Other</option>
             </select>
+            {!['Food', 'Fuel', 'Transport', 'Lodging', 'Entertainment'].includes(category) && (
+              <div className="pt-2 animate-in slide-in-from-top-1 duration-200">
+                <input
+                  type="text"
+                  required
+                  placeholder="Specify category..."
+                  value={category === 'Other' ? '' : category}
+                  onChange={e => setCategory(e.target.value)}
+                  className="w-full px-4 py-3 sm:py-3.5 rounded-xl bg-indigo-50 border border-indigo-100 focus:outline-none focus:border-[#4f46e5] focus:bg-white text-sm transition-all"
+                />
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">WHO PAID?</label>
