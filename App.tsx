@@ -404,10 +404,13 @@ const App: React.FC = () => {
                       </div>
 
                       <div className="space-y-2 max-h-[350px] overflow-y-auto scrollbar-hide">
-                        {activeEvent.expenses.length === 0 ? (
+                        {activeEvent.expenses.filter(e => e.category !== 'Payment').length === 0 ? (
                           <div className="text-center py-10 text-slate-200 font-black text-[10px] uppercase">No transactions yet</div>
                         ) : (
-                          [...activeEvent.expenses].sort((a,b)=>b.date-a.date).map(e => {
+                          [...activeEvent.expenses]
+                            .filter(e => e.category !== 'Payment')
+                            .sort((a,b)=>b.date-a.date)
+                            .map(e => {
                             const payer = activeEvent.participants.find(p => p.id === e.payerId)?.name || 'member';
                             const splitAmong = e.participantIds.length === activeEvent.participants.length 
                               ? 'All' 

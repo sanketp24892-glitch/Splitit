@@ -59,6 +59,7 @@ const OverviewCharts: React.FC<Props> = ({ participants, expenses }) => {
                 <Tooltip 
                   cursor={{ fill: 'transparent' }} 
                   contentStyle={{ borderRadius: '1rem', border: 'none', background: '#1e293b', color: '#fff', fontSize: '9px', fontWeight: 'bold' }} 
+                  itemStyle={{ color: '#fff' }}
                 />
                 <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={32}>
                   {spendingByMember.map((_entry, index) => (
@@ -90,6 +91,7 @@ const OverviewCharts: React.FC<Props> = ({ participants, expenses }) => {
                 </Pie>
                 <Tooltip 
                   contentStyle={{ borderRadius: '1rem', border: 'none', background: '#1e293b', color: '#fff', fontSize: '9px', fontWeight: 'bold' }} 
+                  itemStyle={{ color: '#fff' }}
                 />
               </PieChart>
             </ResponsiveContainer>

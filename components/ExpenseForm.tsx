@@ -21,6 +21,19 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd, onUpdate, editingEx
   const [isScanning, setIsScanning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleCategoryChange = (val: string) => {
+    if (val === 'Other') {
+      const customName = window.prompt("Enter category name:");
+      if (customName && customName.trim()) {
+        setCategory(customName.trim());
+      } else {
+        setCategory('Other');
+      }
+    } else {
+      setCategory(val as any);
+    }
+  };
+
   useEffect(() => {
     if (editingExpense) {
       setDescription(editingExpense.description);
@@ -177,12 +190,13 @@ const ExpenseForm: React.FC<Props> = ({ participants, onAdd, onUpdate, editingEx
           <div className="space-y-2">
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-1">CATEGORY</label>
             <select
-              value={category}
-              onChange={e => setCategory(e.target.value as any)}
+              value={['Food', 'Fuel', 'Transport', 'Lodging', 'Entertainment'].includes(category) ? category : 'Other'}
+              onChange={e => handleCategoryChange(e.target.value)}
               className="w-full px-4 py-3.5 sm:py-4 rounded-xl bg-slate-50 border border-slate-100 focus:outline-none focus:border-[#4f46e5] focus:bg-white text-sm appearance-none cursor-pointer transition-all"
             >
               <option value="Food">Food</option>
               <option value="Fuel">Fuel</option>
+              <option value="Transport">Transport</option>
               <option value="Lodging">Lodging</option>
               <option value="Entertainment">Entertainment</option>
               <option value="Other">Other</option>
